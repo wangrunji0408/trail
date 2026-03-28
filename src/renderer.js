@@ -113,23 +113,13 @@ export class Renderer {
     ctx.fillStyle = PALETTE.textDim;
     ctx.font = '13px monospace';
     ctx.textAlign = 'right';
-    const phaseText = {
-      prism_select: '🔷 选择棱镜色',
-      forked: `分支 ${state.activeBranch + 1}`,
+    const phaseText = {      forked: `分支 ${state.activeBranch + 1}`,
       merge_select: '选择分支',
       in_portal: '📦 子空间',
       delegate_select: '📋 选择指令',
       won: '✓ 通关',
     }[state.phase] || '';
     ctx.fillText(phaseText, canvasW - 20, 24);
-
-    // Hint
-    if (state.hint) {
-      ctx.fillStyle = PALETTE.textDim;
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(state.hint, canvasW / 2, 52);
-    }
   }
 
   _drawGrid(ctx, state) {
@@ -144,11 +134,12 @@ export class Renderer {
         if (cell.type === 'wall') fill = PALETTE.wall;
         else if (cell.type === 'color') fill = this._colorFill(cell.color, 0.35);
         else if (cell.type === 'exit') fill = PALETTE.exitGlow;
-        else if (cell.type === 'gate' || cell.type === 'echo_gate') fill = PALETTE.gate;
+        else if (cell.type === 'gate') fill = PALETTE.gate;
         else if (cell.type === 'switch') fill = PALETTE.empty;
         else if (cell.type === 'switch_wall') fill = switchState[cell.switchId] ? PALETTE.switchWallOpen : PALETTE.switchWallClosed;
-        else if (cell.type === 'checkpoint') fill = PALETTE.empty;
-        else if (cell.type === 'prism') fill = PALETTE.prism;
+        else if (cell.type === 'checkpoint') fill = 'rgba(0,188,212,0.15)';
+        else if (cell.type === 'dye') fill = this._colorFill(cell.color, 0.25);
+        else if (cell.type === 'wildcard') fill = 'rgba(200,200,200,0.15)';
         else if (cell.type === 'fork') fill = PALETTE.empty;
         else if (cell.type === 'merge') fill = PALETTE.empty;
         else if (cell.type === 'portal') fill = 'rgba(155,89,182,0.2)';
@@ -196,10 +187,9 @@ export class Renderer {
     if (cell.type === 'exit') {
       ctx.fillStyle = PALETTE.exit;
       ctx.font = 'bold 22px monospace';
-      ctx.fillText('E', mx, my);
+      ctx.fillText('⚑', mx, my);
     }
     if (cell.type === 'gate') {
-      // Show pattern as colored dots
       const p = cell.pattern;
       const dotR = 6;
       const totalW = p.length * dotR * 2 + (p.length - 1) * 3;
@@ -214,6 +204,21 @@ export class Renderer {
         ctx.stroke();
         sx += dotR * 2 + 3;
       }
+    }
+    if (cell.type === 'checkpoint') {
+      ctx.fillStyle = PALETTE.checkpoint;
+      ctx.font = 'bold 15px monospace';
+      ctx.fillText('</>', mx, my);
+    }
+    if (cell.type === 'dye') {
+      ctx.fillStyle = colorVal(cell.color);
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText('▼', mx, my);
+    }
+    if (cell.type === 'wildcard') {
+      ctx.fillStyle = PALETTE.textDim;
+      ctx.font = '20px monospace';
+      ctx.fillText('◇', mx, my);
     }
     if (cell.type === 'echo_gate') {
       ctx.fillStyle = PALETTE.checkpoint;
@@ -390,28 +395,7 @@ export class Renderer {
     ctx.font = '11px monospace';
     ctx.textAlign = 'center';
     let controlsY = footerY + 72;
-    ctx.fillText('方向键:移动  Z:撤销  R:重来  N:下一关', canvasW / 2, controlsY);
-    if (state.world >= 6) {
-      ctx.fillText('Backspace:倒带', canvasW / 2, controlsY + 16);
-    }
-
-    // Prism selector
-    if (state.phase === 'prism_select' && state.prismOptions) {
-      ctx.fillStyle = PALETTE.text;
-      ctx.font = '14px monospace';
-      ctx.fillText('选择棱镜色:', canvasW / 2, footerY + 10);
-      const opts = state.prismOptions;
-      const totalOptW = opts.length * 80;
-      let ox = canvasW / 2 - totalOptW / 2;
-      for (let i = 0; i < opts.length; i++) {
-        const c = opts[i];
-        ctx.fillStyle = colorVal(c);
-        ctx.font = 'bold 14px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(`[${i + 1}] ●`, ox + 40, footerY + 34);
-        ox += 80;
-      }
-    }
+    ctx.fillText('方向键:移动(反向=撤销)  R:重来  N:下一关', canvasW / 2, controlsY);
 
     // Delegate selector
     if (state.phase === 'delegate_select' && state.delegateInstructions) {

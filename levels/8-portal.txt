@@ -1,0 +1,8 @@
+# world: 8
+# title: 传送
+# note: 主网格缺少的颜色只能从子空间获取
+# gate: ry
+
+S r @ . G E
+
+# solution: dd{ddd}ddd

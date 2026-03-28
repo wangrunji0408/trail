@@ -1,0 +1,10 @@
+# world: 5
+# title: 分叉
+# note: 分叉后两条分支各取所需，合并时副作用保留
+# gate: r
+
+. . . !a . . . #
+S . F . . M |a E
+. . . . r . . #
+
+# solution: dd[wdds]t[sdddw]2dd

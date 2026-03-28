@@ -1,0 +1,13 @@
+# world: 2
+# title: 回声
+# note: 检查点取反最后颜色并自动延伸，玩家需要利用自动生成的颜色通过门
+# gate: rb
+# checkpoint: invert 1
+
+# # # # # # # #
+# . . . . . . #
+S . . r C . G E
+# . . . . . . #
+# # # # # # # #
+
+# solution: ddddddd

@@ -1,0 +1,10 @@
+# world: 4
+# title: 暗影
+# note: 暗区中的蛇身对门不可见，玩家需通过暗区绕过颜色干扰
+# gate: r
+
+. . b . . #
+S r # . G E
+. . ~b . . #
+
+# solution: dsdddwdd

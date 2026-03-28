@@ -2,11 +2,12 @@
 
 import { Game, DIR } from './game.js';
 import { Renderer } from './renderer.js';
-import { LEVELS } from './levels.js';
+import { loadLevelsBrowser } from './levels.js';
 
 let currentLevelIndex = 0;
 let game = null;
 let renderer = null;
+let LEVELS = [];
 
 function loadLevel(index) {
   if (index < 0 || index >= LEVELS.length) return;
@@ -36,16 +37,6 @@ function handleKey(e) {
   }
   if (key === 'p' || key === 'P') {
     loadLevel(currentLevelIndex - 1);
-    return;
-  }
-
-  // Prism selection
-  if (game.phase === 'prism_select') {
-    const idx = parseInt(key) - 1;
-    if (idx >= 0 && idx < game.prismOptions.length) {
-      game.setPrism(game.prismOptions[idx]);
-    }
-    render();
     return;
   }
 
@@ -107,9 +98,12 @@ function handleKey(e) {
 }
 
 // Init
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas');
   renderer = new Renderer(canvas);
+
+  // Load levels
+  LEVELS = await loadLevelsBrowser();
 
   // Level selector
   const select = document.getElementById('levelSelect');

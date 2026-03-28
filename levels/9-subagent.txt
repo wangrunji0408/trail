@@ -1,0 +1,10 @@
+# world: 9
+# title: 委派
+# note: 选择不同指令让子代理走不同路径返回不同颜色
+# gate: rg
+
+# . . . . . #
+S r $ . . G E
+# . . . . . #
+
+# solution: dd{1}dddd
