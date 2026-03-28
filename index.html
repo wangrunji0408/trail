@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRAIL</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0f0e17;
+      color: #e0e0e0;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    #toolbar label {
+      color: #7f8c8d;
+      font-size: 13px;
+    }
+    #levelSelect {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      padding: 4px 8px;
+      font-family: monospace;
+      font-size: 13px;
+      border-radius: 4px;
+    }
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <label>关卡:</label>
+    <select id="levelSelect"></select>
+  </div>
+  <canvas id="gameCanvas"></canvas>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
