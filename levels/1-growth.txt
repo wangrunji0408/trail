@@ -1,10 +1,10 @@
-# world: 1
-# title: 生长
-# note: 颜色顺序决定能否通过门，两条路径只有一条顺序正确
-# gate: rb
+// world: 1
+// title: 生长
+// note: 颜色顺序决定能否通过门，两条路径只有一条顺序正确
+// gate: rb
 
 . . b r . #
 S . # # G E
 . . r b . #
 
-# solution: sddddwd
+// solution: sddddwd

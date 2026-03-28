@@ -53,9 +53,9 @@ function playSolution(game, solution) {
 describe('Parser', () => {
   it('parses a simple level', () => {
     const def = parseLevelText(`
-# world: 1
-# title: Test
-# gate: rb
+// world: 1
+// title: Test
+// gate: rb
 S . r b G E
 `);
     assert.equal(def.world, 1);
@@ -66,7 +66,7 @@ S . r b G E
 
   it('parses solution from meta', () => {
     const def = parseLevelText(`
-# solution: dddwwd
+// solution: dddwwd
 S . . . E
 `);
     assert.equal(def.solution, 'dddwwd');
@@ -78,20 +78,19 @@ S . . . E
 // ============================================================
 describe('Gate: subsequence matching', () => {
   it('matches contiguous pattern', () => {
-    const g = new Game(parseLevelText(`# gate: rb\nS r b G E`));
+    const g = new Game(parseLevelText(`// gate: rb\nS r b G E`));
     playSolution(g, 'dddd');
     assert.ok(g.won);
   });
 
-  it('rejects non-contiguous', () => {
-    const g = new Game(parseLevelText(`# gate: rb\nS r . b G E`));
-    playSolution(g, 'ddd');
-    const r = g.move(RIGHT);
-    assert.equal(r.reason, 'pattern mismatch');
+  it('ignores empty cells between colors', () => {
+    const g = new Game(parseLevelText(`// gate: rb\nS r . b G E`));
+    playSolution(g, 'ddddd');
+    assert.ok(g.won);
   });
 
   it('rejects wrong order', () => {
-    const g = new Game(parseLevelText(`# gate: rb\nS b r . G E`));
+    const g = new Game(parseLevelText(`// gate: rb\nS b r . G E`));
     playSolution(g, 'ddd');
     const r = g.move(RIGHT);
     assert.equal(r.reason, 'pattern mismatch');

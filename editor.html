@@ -70,6 +70,23 @@
     }
     #error { color: #e74c3c; font-size: 12px; min-height: 18px; }
     #legend { font-size: 11px; color: #7f8c8d; line-height: 1.4; }
+    #sequence {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-height: 24px;
+      flex-wrap: wrap;
+      padding: 4px 0;
+    }
+    #sequence .seq-dot {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.2);
+      flex-shrink: 0;
+    }
+    #sequence .seq-dot.shadow { opacity: 0.35; }
+    #sequence .seq-dot.preset { border-style: dashed; }
+    #sequence .seq-label { color: #7f8c8d; font-size: 11px; margin-right: 4px; }
     canvas { display: block; cursor: crosshair; }
     #status { color: #7f8c8d; font-size: 12px; min-height: 18px; }
     #modeIndicator { font-size: 12px; color: #ffd700; min-height: 18px; }
@@ -90,15 +107,15 @@
     </div>
     <div id="palette"></div>
     <div id="modeIndicator"></div>
-    <textarea id="editor" spellcheck="false"># world: 1
-# title: My Level
-# gate: rb
+    <textarea id="editor" spellcheck="false">// world: 1
+// title: My Level
+// gate: rb
 
 . . b r . #
 S . # # G E
 . . r b . #
 
-# solution: sddddwd
+// solution: sddddwd
 </textarea>
     <div id="error"></div>
     <div id="legend">
@@ -107,6 +124,7 @@ S . # # G E
   </div>
   <div id="right">
     <canvas id="gameCanvas"></canvas>
+    <div id="sequence"></div>
     <div id="status">点击格子放置 · 方向键试玩 · Z撤销 · R重置</div>
   </div>
 
@@ -123,6 +141,8 @@ S . # # G E
     const renderer = new Renderer(canvas);
     const loadSelect = document.getElementById('loadLevel');
     const paletteEl = document.getElementById('palette');
+
+    const sequenceEl = document.getElementById('sequence');
 
     let game = null;
     let levelDef = null;
@@ -207,6 +227,24 @@ S . # # G E
       renderer.render(game.getState());
       statusEl.textContent = game.won ? '✓ 通关！' :
         `蛇长: ${game.snake.length}` + (game.phase !== 'playing' ? ` · ${game.phase}` : '');
+      renderSequence();
+    }
+
+    const COLOR_HEX = { red: '#e74c3c', blue: '#3498db', green: '#2ecc71', yellow: '#f1c40f' };
+
+    function renderSequence() {
+      if (!game) { sequenceEl.innerHTML = ''; return; }
+      const snake = game.getActiveSnake();
+      let html = '<span class="seq-label">序列:</span>';
+      for (const seg of snake) {
+        if (!seg.color) continue;
+        const bg = COLOR_HEX[seg.color] || '#888';
+        let cls = 'seq-dot';
+        if (seg.isShadow) cls += ' shadow';
+        if (seg.isPreset) cls += ' preset';
+        html += `<div class="${cls}" style="background:${bg}" title="${seg.color}${seg.isShadow ? ' (暗)' : ''}${seg.isPreset ? ' (自动)' : ''}"></div>`;
+      }
+      sequenceEl.innerHTML = html;
     }
 
     let debounce = null;
@@ -247,23 +285,24 @@ S . # # G E
       updateCellInText(gx, gy, selectedTile);
     });
 
+    function isMetaLine(line) {
+      const t = line.trim();
+      return !t || t.startsWith('//');
+    }
+
     function updateCellInText(gx, gy, token) {
       const text = editorEl.value;
       const lines = text.split('\n');
 
-      // Find map lines (non-meta, non-empty)
-      const mapStart = lines.findIndex(l => {
-        const t = l.trim();
-        return t && !t.startsWith('#');
-      });
+      // Find first map line (non-meta, non-empty)
+      const mapStart = lines.findIndex(l => !isMetaLine(l));
       if (mapStart < 0) return;
 
       // Find the map line for row gy
       let mapRow = 0;
       let lineIdx = -1;
       for (let i = mapStart; i < lines.length; i++) {
-        const t = lines[i].trim();
-        if (!t || t.startsWith('#')) continue;
+        if (isMetaLine(lines[i])) continue;
         if (mapRow === gy) { lineIdx = i; break; }
         mapRow++;
       }
@@ -288,6 +327,8 @@ S . # # G E
     const DIR_MAP = {
       ArrowUp: DIR.UP, ArrowDown: DIR.DOWN,
       ArrowLeft: DIR.LEFT, ArrowRight: DIR.RIGHT,
+      w: DIR.UP, s: DIR.DOWN, a: DIR.LEFT, d: DIR.RIGHT,
+      W: DIR.UP, S: DIR.DOWN, A: DIR.LEFT, D: DIR.RIGHT,
     };
 
     window.addEventListener('keydown', (e) => {

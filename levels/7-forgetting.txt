@@ -1,11 +1,11 @@
-# world: 7
-# title: 遗忘
-# note: 蛇身超过长度上限后最老段消失，记忆石保存关键颜色
-# gate: r
-# maxLength: 5
+// world: 7
+// title: 遗忘
+// note: 蛇身超过长度上限后最老段消失，记忆石保存关键颜色
+// gate: r
+// maxLength: 5
 
 . . . r . . . . . #
 S . . # . . . . G E
 . . . *r . . . . . #
 
-# solution: sdddddwdddddd
+// solution: sdddddwdddddd

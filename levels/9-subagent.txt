@@ -1,10 +1,17 @@
-# world: 9
-# title: 委派
-# note: 选择不同指令让子代理走不同路径返回不同颜色
-# gate: rg
+// world: 9
+// title: 委派
+// note: 选择不同指令让子代理走不同路径返回不同颜色
+// gate: rg
+// instructions: ↑→→→ 向上再向右|↓→→→ 向下再向右|→→→ 直行
+// solution: dd{1}dddd
 
 # . . . . . #
 S r $ . . G E
 # . . . . . #
 
-# solution: dd{1}dddd
+--- sublevel
+// title: 子代理空间
+
+. g . .
+S . . E
+. b . .

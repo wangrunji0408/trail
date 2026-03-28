@@ -261,20 +261,10 @@ export class Renderer {
         }
       }
     }
-    if (cell.type === 'checkpoint') {
-      ctx.fillStyle = PALETTE.checkpoint;
-      ctx.font = 'bold 18px monospace';
-      ctx.fillText('C', mx, my);
-    }
     if (cell.type === 'fork') {
       ctx.fillStyle = PALETTE.fork;
-      ctx.font = 'bold 18px monospace';
-      ctx.fillText('F', mx, my);
-    }
-    if (cell.type === 'merge') {
-      ctx.fillStyle = PALETTE.fork;
-      ctx.font = 'bold 18px monospace';
-      ctx.fillText('M', mx, my);
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText('⑂', mx, my);
     }
     if (cell.type === 'portal') {
       ctx.fillStyle = PALETTE.portal;
@@ -291,17 +281,18 @@ export class Renderer {
   _drawSnake(ctx, snake, active, state) {
     if (snake.length === 0) return;
 
-    // Draw connections
+    // Draw connections (only between grid-adjacent consecutive segments)
     for (let i = 0; i < snake.length - 1; i++) {
       const a = snake[i], b = snake[i + 1];
-      const ax = a.x * CELL + CELL / 2, ay = a.y * CELL + CELL / 2;
-      const bx = b.x * CELL + CELL / 2, by = b.y * CELL + CELL / 2;
-      ctx.strokeStyle = active ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)';
-      ctx.lineWidth = 8;
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      ctx.stroke();
+      if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) continue;
+      this._drawConnection(ctx, a, b, active);
+    }
+
+    // Draw extra connections (from fork merges)
+    if (active && state.extraConnections) {
+      for (const [a, b] of state.extraConnections) {
+        this._drawConnection(ctx, a, b, active);
+      }
     }
 
     // Draw segments
@@ -455,6 +446,17 @@ export class Renderer {
   }
 
   // Helpers
+  _drawConnection(ctx, a, b, active) {
+    const ax = a.x * CELL + CELL / 2, ay = a.y * CELL + CELL / 2;
+    const bx = b.x * CELL + CELL / 2, by = b.y * CELL + CELL / 2;
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+  }
+
   _fillRoundRect(ctx, x, y, w, h, r, fill) {
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, r);

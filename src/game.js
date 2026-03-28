@@ -1,5 +1,4 @@
 // TRAIL - Game Engine
-// Worlds: 1-Growth 2-Echo 3-Prism 4-Shadow 5-Fork 6-Rewind 7-Forgetting 8-Portal 9-Subagent
 
 export const DIR = {
   UP: { dx: 0, dy: -1 },
@@ -24,7 +23,6 @@ export class Game {
     this.height = def.height;
     this.world = def.world || 0;
 
-    // Build grid
     this.grid = Array.from({ length: this.height }, () =>
       Array.from({ length: this.width }, () => ({ type: 'empty' }))
     );
@@ -40,11 +38,9 @@ export class Game {
     if (def.checkpoints) for (const t of def.checkpoints) {
       this.grid[t.y][t.x] = { type: 'checkpoint' };
     }
-    // Dye tiles (new: World 3)
     if (def.dyes) for (const t of def.dyes) {
       this.grid[t.y][t.x] = { type: 'dye', color: t.c };
     }
-    // Wildcard tiles (new: World 3)
     if (def.wildcards) for (const [x, y] of def.wildcards) {
       this.grid[y][x] = { type: 'wildcard' };
     }
@@ -55,7 +51,6 @@ export class Game {
       this.grid[t.y][t.x] = { type: 'color', color: t.c, shadow: true };
     }
     if (def.forks) for (const t of def.forks) this.grid[t.y][t.x] = { type: 'fork' };
-    if (def.merges) for (const t of def.merges) this.grid[t.y][t.x] = { type: 'merge' };
     if (def.portals) for (const t of def.portals) {
       this.grid[t.y][t.x] = { type: 'portal', subLevel: t.subLevel };
     }
@@ -67,30 +62,29 @@ export class Game {
     }
     if (def.exit) this.grid[def.exit[1]][def.exit[0]] = { type: 'exit' };
 
-    // Snake
     this.snake = [{ x: def.start[0], y: def.start[1], color: null, isShadow: false, isPreset: false }];
 
-    // State
     this.won = false;
     this.switchState = {};
     this.undoStack = [];
     this.message = null;
     this.maxLength = def.maxLength || Infinity;
     this.memoryStoneColors = {};
-    this.lastDir = null; // track direction for checkpoint auto-extend
+    this.lastDir = null;
 
-    // Checkpoint config
     this.checkpointRule = def.checkpointRule || 'invert';
     this.checkpointSteps = def.checkpointSteps || 1;
 
-    // Phase
     this.phase = 'playing';
 
     // Fork
     this.branches = null;
     this.activeBranch = 0;
+    this.forkLength = 0;
 
-    // Portal / Delegate
+    // Extra connections for rendering (e.g., fork branches)
+    this.extraConnections = [];
+
     this.portalGame = null;
     this.portalReturnPos = null;
   }
@@ -113,7 +107,7 @@ export class Game {
     if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height)
       return { success: false, reason: 'out of bounds' };
 
-    // Walk-back undo: moving toward the second-to-last segment = undo
+    // Walk-back undo
     const activeSnake = this.getActiveSnake();
     if (activeSnake.length >= 2) {
       const prev = activeSnake[activeSnake.length - 2];
@@ -128,17 +122,25 @@ export class Game {
       return { success: false, reason: 'locked' };
     if (cell.type === 'wildcard') return { success: false, reason: 'wildcard not activated' };
 
-    // Self collision
+    // Self collision (active branch)
     if (activeSnake.some(s => s.x === nx && s.y === ny))
       return { success: false, reason: 'self collision' };
+
+    // Fork: check if target is on other branch's UNIQUE segments → auto-merge
     if (this.branches) {
       for (let i = 0; i < this.branches.length; i++) {
-        if (i !== this.activeBranch && this.branches[i].snake.some(s => s.x === nx && s.y === ny))
-          return { success: false, reason: 'branch collision' };
+        if (i === this.activeBranch) continue;
+        const other = this.branches[i].snake;
+        for (let j = this.forkLength; j < other.length; j++) {
+          if (other[j].x === nx && other[j].y === ny) {
+            this._mergeBranches(this.activeBranch, i, nx, ny);
+            return { success: true };
+          }
+        }
       }
     }
 
-    // Gate: subsequence check
+    // Gate check
     if (cell.type === 'gate' && !this._checkGate(cell.pattern))
       return { success: false, reason: 'pattern mismatch' };
 
@@ -146,18 +148,16 @@ export class Game {
     this.pushUndo();
     this.lastDir = dir;
 
-    // Determine segment color
     let segColor = null;
     if (cell.type === 'color') segColor = cell.color;
     if (cell.type === 'dye') segColor = cell.color;
 
-    const seg = {
+    activeSnake.push({
       x: nx, y: ny,
       color: segColor,
       isShadow: !!cell.shadow,
       isPreset: false,
-    };
-    activeSnake.push(seg);
+    });
     this._applyEffects(cell, nx, ny, dir);
     this._enforceMaxLength();
     return { success: true };
@@ -174,7 +174,17 @@ export class Game {
       this.won = true;
       this.phase = 'won';
     }
-    // Dye: transform all wildcard tiles
+    // Fork: auto-fork when stepping on F tile
+    if (cell.type === 'fork' && !this.branches) {
+      this.branches = [
+        { snake: clone(this.getActiveSnake()), switchState: clone(this.switchState) },
+        { snake: clone(this.getActiveSnake()), switchState: clone(this.switchState) },
+      ];
+      this.forkLength = this.getActiveSnake().length;
+      this.activeBranch = 0;
+      this.phase = 'forked';
+      this.message = 'Tab 切换分支 · 走到另一分支上自动合并';
+    }
     if (cell.type === 'dye') {
       for (let gy = 0; gy < this.height; gy++) {
         for (let gx = 0; gx < this.width; gx++) {
@@ -184,28 +194,14 @@ export class Game {
         }
       }
     }
-    // Checkpoint: auto-extend in current direction
     if (cell.type === 'checkpoint') {
       this._handleCheckpoint(dir);
-    }
-    if (cell.type === 'fork' && !this.branches) {
-      this.branches = [
-        { snake: clone(this.getActiveSnake()), switchState: clone(this.switchState) },
-        { snake: clone(this.getActiveSnake()), switchState: clone(this.switchState) },
-      ];
-      this.activeBranch = 0;
-      this.phase = 'forked';
-      this.message = 'Tab 切换分支 · 到达合并点后按 1/2 选择';
-    }
-    if (cell.type === 'merge' && this.branches) {
-      this.phase = 'merge_select';
-      this.message = '按 1 或 2 选择保留哪条分支';
     }
     if (cell.type === 'portal') {
       this.portalReturnPos = { x, y };
       this.portalGame = new Game(cell.subLevel);
       this.phase = 'in_portal';
-      this.message = '进入传送门！在子网格中解谜获取结果';
+      this.message = '进入传送门！';
     }
     if (cell.type === 'delegate') {
       this.portalReturnPos = { x, y };
@@ -217,80 +213,87 @@ export class Game {
 
   _handleCheckpoint(dir) {
     const snake = this.getActiveSnake();
-
-    // Find last colored segment (player's input)
     let lastColor = null;
-    for (let i = snake.length - 2; i >= 0; i--) { // -2: skip checkpoint segment itself
+    for (let i = snake.length - 2; i >= 0; i--) {
       if (snake[i].color && !snake[i].isPreset) { lastColor = snake[i].color; break; }
     }
     if (!lastColor) return;
 
-    // Determine response color
-    let responseColor;
-    if (this.checkpointRule === 'invert') {
-      responseColor = INVERT[lastColor] || lastColor;
-    } else {
-      responseColor = lastColor;
-    }
+    const responseColor = this.checkpointRule === 'invert'
+      ? (INVERT[lastColor] || lastColor) : lastColor;
 
-    // Set checkpoint segment color to response
-    snake[snake.length - 1].color = responseColor;
     snake[snake.length - 1].isPreset = true;
 
-    // Auto-extend in current direction
     for (let step = 0; step < this.checkpointSteps; step++) {
       const head = snake[snake.length - 1];
       const ax = head.x + dir.dx;
       const ay = head.y + dir.dy;
       if (ax < 0 || ax >= this.width || ay < 0 || ay >= this.height) break;
-      const autoCell = this.grid[ay][ax];
-      if (autoCell.type === 'wall') break;
+      if (this.grid[ay][ax].type === 'wall') break;
       if (snake.some(s => s.x === ax && s.y === ay)) break;
-      snake.push({
-        x: ax, y: ay,
-        color: responseColor,
-        isShadow: false,
-        isPreset: true,
-      });
+      snake.push({ x: ax, y: ay, color: responseColor, isShadow: false, isPreset: true });
     }
   }
 
   // === GATE CHECKING ===
-  // Subsequence search: find pattern as contiguous run anywhere in visible snake
   _checkGate(pattern) {
     const visible = this.getActiveSnake().filter(s => !s.isShadow);
     const stoneSegs = Object.values(this.memoryStoneColors).map(c => ({ color: c }));
-    const all = [...stoneSegs, ...visible];
-
-    // Sliding window search
-    for (let i = 0; i <= all.length - pattern.length; i++) {
+    const colored = [...stoneSegs, ...visible].filter(s => s.color);
+    for (let i = 0; i <= colored.length - pattern.length; i++) {
       let match = true;
       for (let j = 0; j < pattern.length; j++) {
-        if (all[i + j].color !== pattern[j]) { match = false; break; }
+        if (colored[i + j].color !== pattern[j]) { match = false; break; }
       }
       if (match) return true;
     }
     return false;
   }
 
-  // === WORLD-SPECIFIC ACTIONS ===
+  // === FORK (Tab) ===
+  // Tab when not forked → create fork; Tab when forked → switch branch
   switchBranch() {
-    if (!this.branches || this.phase === 'merge_select') return;
+    if (!this.branches) return;
+    // Switch active branch
     this.branches[this.activeBranch].switchState = clone(this.switchState);
     this.activeBranch = (this.activeBranch + 1) % this.branches.length;
     this.switchState = clone(this.branches[this.activeBranch].switchState);
   }
 
-  selectBranch(index) {
-    if (this.phase !== 'merge_select' || !this.branches) return;
-    if (index < 0 || index >= this.branches.length) return;
-    this.branches[this.activeBranch].switchState = clone(this.switchState);
-    const merged = {};
-    for (const b of this.branches) Object.assign(merged, b.switchState);
-    this.snake = this.branches[index].snake;
-    this.switchState = merged;
+  // Auto-merge: moving branch lands on target branch's unique cell
+  _mergeBranches(movingIdx, targetIdx, mergeX, mergeY) {
+    this.pushUndo();
+    const moving = this.branches[movingIdx];
+    const target = this.branches[targetIdx];
+
+    const mergedSwitch = {};
+    Object.assign(mergedSwitch, target.switchState);
+    Object.assign(mergedSwitch, moving.switchState);
+
+    const shared = target.snake.slice(0, this.forkLength);
+    const movingUnique = moving.snake.slice(this.forkLength);
+    const targetUnique = target.snake.slice(this.forkLength);
+
+    this.snake = [...shared, ...movingUnique, ...targetUnique];
+
+    // Extra connections for renderer:
+    // 1. Fork point → target branch start
+    // 2. Moving branch end → merge point
+    this.extraConnections = [];
+    if (shared.length > 0 && targetUnique.length > 0) {
+      this.extraConnections.push([shared[shared.length - 1], targetUnique[0]]);
+    }
+    if (movingUnique.length > 0) {
+      const mergePoint = target.snake.find(s => s.x === mergeX && s.y === mergeY);
+      if (mergePoint) {
+        this.extraConnections.push([movingUnique[movingUnique.length - 1], mergePoint]);
+      }
+    }
+
+    this.switchState = mergedSwitch;
     this.branches = null;
     this.activeBranch = 0;
+    this.forkLength = 0;
     this.phase = 'playing';
     this.message = null;
   }
@@ -310,10 +313,9 @@ export class Game {
 
   _exitPortal() {
     if (!this.portalGame) return;
-    const ps = this.portalGame.snake;
     let returnColor = null;
-    for (let i = ps.length - 1; i >= 0; i--) {
-      if (ps[i].color) { returnColor = ps[i].color; break; }
+    for (let i = this.portalGame.snake.length - 1; i >= 0; i--) {
+      if (this.portalGame.snake[i].color) { returnColor = this.portalGame.snake[i].color; break; }
     }
     this.snake[this.snake.length - 1].color = returnColor;
     this.portalGame = null;
@@ -357,8 +359,10 @@ export class Game {
       memoryStoneColors: clone(this.memoryStoneColors),
       branches: this.branches ? clone(this.branches) : null,
       activeBranch: this.activeBranch,
+      forkLength: this.forkLength,
+      extraConnections: clone(this.extraConnections),
       message: this.message,
-      grid: clone(this.grid), // needed for dye undo
+      grid: clone(this.grid),
     });
     if (this.undoStack.length > 200) this.undoStack.shift();
   }
@@ -374,6 +378,8 @@ export class Game {
     this.memoryStoneColors = s.memoryStoneColors;
     this.branches = s.branches;
     this.activeBranch = s.activeBranch;
+    this.forkLength = s.forkLength;
+    this.extraConnections = s.extraConnections;
     this.message = s.message;
     this.grid = s.grid;
     return true;
@@ -394,12 +400,12 @@ export class Game {
     return {
       grid: this.grid, width: this.width, height: this.height,
       snakes: this.getAllSnakes(), won: this.won, phase: this.phase,
-      switchState: this.switchState,
-      message: this.message,
+      switchState: this.switchState, message: this.message,
       maxLength: this.maxLength, memoryStoneColors: this.memoryStoneColors,
       portalGame: this.portalGame,
-      world: this.world, title: this.levelDef.title, hint: this.levelDef.hint,
+      world: this.world, title: this.levelDef.title,
       activeBranch: this.activeBranch,
+      extraConnections: this.extraConnections,
       delegateInstructions: this._delegateCell?.instructions || null,
     };
   }

@@ -9,18 +9,35 @@ let game = null;
 let renderer = null;
 let LEVELS = [];
 
+const COLOR_HEX = { red: '#e74c3c', blue: '#3498db', green: '#2ecc71', yellow: '#f1c40f' };
+
 function loadLevel(index) {
   if (index < 0 || index >= LEVELS.length) return;
   currentLevelIndex = index;
   game = new Game(LEVELS[index]);
   render();
-  // Update level selector
   document.getElementById('levelSelect').value = index;
 }
 
 function render() {
   if (!game || !renderer) return;
   renderer.render(game.getState());
+  renderSequence();
+}
+
+function renderSequence() {
+  const el = document.getElementById('sequence');
+  if (!el || !game) return;
+  const snake = game.getActiveSnake();
+  let html = '';
+  for (const seg of snake) {
+    if (!seg.color) continue;
+    const bg = COLOR_HEX[seg.color] || '#888';
+    const opacity = seg.isShadow ? '0.35' : '1';
+    const border = seg.isPreset ? 'dashed' : 'solid';
+    html += `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${bg};opacity:${opacity};border:1.5px ${border} rgba(255,255,255,0.3);margin:0 1px;" title="${seg.color}"></span>`;
+  }
+  el.innerHTML = html;
 }
 
 function handleKey(e) {
@@ -28,11 +45,8 @@ function handleKey(e) {
   const key = e.key;
   let handled = true;
 
-  // Level navigation
   if (key === 'n' || key === 'N') {
-    if (game.won || e.shiftKey) {
-      loadLevel(currentLevelIndex + 1);
-    }
+    if (game.won || e.shiftKey) loadLevel(currentLevelIndex + 1);
     return;
   }
   if (key === 'p' || key === 'P') {
@@ -43,56 +57,26 @@ function handleKey(e) {
   // Delegate instruction selection
   if (game.phase === 'delegate_select') {
     const idx = parseInt(key) - 1;
-    if (idx >= 0) {
-      game.selectInstruction(idx);
-    }
+    if (idx >= 0) game.selectInstruction(idx);
     render();
     return;
   }
 
-  // Merge branch selection
-  if (game.phase === 'merge_select') {
-    const idx = parseInt(key) - 1;
-    if (idx >= 0 && idx < 2) {
-      game.selectBranch(idx);
-    }
-    render();
-    return;
-  }
-
-  // Movement
   const dirMap = {
     ArrowUp: DIR.UP, ArrowDown: DIR.DOWN,
     ArrowLeft: DIR.LEFT, ArrowRight: DIR.RIGHT,
+    w: DIR.UP, s: DIR.DOWN, a: DIR.LEFT, d: DIR.RIGHT,
+    W: DIR.UP, S: DIR.DOWN, A: DIR.LEFT, D: DIR.RIGHT,
   };
   if (dirMap[key]) {
     game.move(dirMap[key]);
-    // Check portal completion
-    if (game.phase === 'in_portal' && game.portalGame?.won) {
-      game._exitPortal();
-    }
+    if (game.phase === 'in_portal' && game.portalGame?.won) game._exitPortal();
   }
-  // Undo
-  else if (key === 'z' || key === 'Z') {
-    game.undo();
-  }
-  // Restart
-  else if (key === 'r' || key === 'R') {
-    game.restart();
-  }
-  // Rewind (World 6+)
-  else if (key === 'Backspace') {
-    game.rewind();
-    e.preventDefault();
-  }
-  // Switch branch (World 5)
-  else if (key === 'Tab') {
-    game.switchBranch();
-    e.preventDefault();
-  }
-  else {
-    handled = false;
-  }
+  else if (key === 'z' || key === 'Z') game.undo();
+  else if (key === 'r' || key === 'R') game.restart();
+  else if (key === 'Backspace') { game.rewind(); e.preventDefault(); }
+  else if (key === 'Tab') { game.switchBranch(); e.preventDefault(); }
+  else handled = false;
 
   if (handled) render();
 }
@@ -102,10 +86,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas');
   renderer = new Renderer(canvas);
 
-  // Load levels
   LEVELS = await loadLevelsBrowser();
 
-  // Level selector
   const select = document.getElementById('levelSelect');
   LEVELS.forEach((level, i) => {
     const opt = document.createElement('option');
@@ -113,13 +95,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     opt.textContent = `${level.world}. ${level.title}`;
     select.appendChild(opt);
   });
-  select.addEventListener('change', (e) => {
-    loadLevel(parseInt(e.target.value));
-  });
-
-  // Keyboard
+  select.addEventListener('change', (e) => loadLevel(parseInt(e.target.value)));
   window.addEventListener('keydown', handleKey);
-
-  // Start
   loadLevel(0);
 });
