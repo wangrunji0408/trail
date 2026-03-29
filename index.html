@@ -2,53 +2,788 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>TRAIL</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
       background: #0f0e17;
       color: #e0e0e0;
       font-family: monospace;
+      height: 100%;
+      overflow: hidden;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+    #app {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      padding: 16px;
+      height: 100%;
+      width: 100%;
     }
+
+    /* ── Toolbar ── */
     #toolbar {
       display: flex;
       align-items: center;
-      gap: 16px;
-      margin-bottom: 8px;
+      gap: 8px;
+      padding: 5px 10px;
+      flex-shrink: 0;
+      background: #0d0c14;
+      border-bottom: 1px solid #1a1a2e;
     }
-    #toolbar label {
-      color: #7f8c8d;
-      font-size: 13px;
-    }
+    #toolbar label { color: #7f8c8d; font-size: 12px; flex-shrink: 0; }
     #levelSelect {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      padding: 4px 6px;
+      font-family: monospace;
+      font-size: 12px;
+      border-radius: 4px;
+      flex: 1;
+      min-width: 0;
+      min-height: 30px;
+    }
+    .tb-btn {
+      background: #1a1a2e;
+      color: #7f8c8d;
+      border: 1px solid #333;
+      padding: 4px 10px;
+      font-family: monospace;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 30px;
+      flex-shrink: 0;
+    }
+    .tb-btn:hover { background: #2a2a4e; color: #e0e0e0; }
+    .tb-btn.active { border-color: #ffd700; color: #ffd700; }
+
+    /* ── Main area ── */
+    #main-area {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* ── Game panel ── */
+    #game-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+    #canvas-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    #sequence {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      min-height: 16px;
+      padding: 2px 10px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    /* ── D-pad ── */
+    #dpad {
+      display: none;
+      flex-shrink: 0;
+      padding: 6px 8px 10px;
+      justify-content: center;
+    }
+    @media (pointer: coarse) {
+      #dpad { display: flex; }
+    }
+    .dpad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 52px);
+      grid-template-rows: repeat(3, 52px);
+      gap: 4px;
+    }
+    .dpad-btn {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4e;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    .dpad-btn:active { background: #2a2a4e; transform: scale(0.9); }
+    .dpad-btn.dpad-action { font-size: 12px; background: #111128; }
+    .dpad-btn.dpad-empty { background: transparent; border-color: transparent; pointer-events: none; }
+    .dpad-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-top: 5px;
+    }
+    .dpad-actions .dpad-btn {
+      width: 68px;
+      height: 36px;
+      font-size: 11px;
+      border-radius: 6px;
+    }
+
+    /* ── Editor panel ── */
+    #editor-panel {
+      display: none;
+      flex-direction: column;
+      width: 360px;
+      min-width: 280px;
+      max-width: 50vw;
+      border-left: 1px solid #2a2a4e;
+      background: #0d0c14;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    #editor-panel.open { display: flex; }
+
+    /* On small screens (phone portrait), editor takes full width as overlay */
+    @media (max-width: 600px) {
+      #editor-panel.open {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        max-width: 100%;
+        z-index: 100;
+        border-left: none;
+      }
+    }
+
+    .ep-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-bottom: 1px solid #2a2a4e;
+      flex-shrink: 0;
+    }
+    .ep-header h2 { font-size: 13px; color: #ffd700; flex: 1; }
+    .ep-close {
+      background: transparent;
+      border: none;
+      color: #7f8c8d;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+    .ep-close:hover { color: #e0e0e0; }
+
+    .ep-toolbar {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      padding: 6px 8px;
+      border-bottom: 1px solid #1a1a2e;
+      flex-shrink: 0;
+    }
+    .ep-btn {
       background: #1a1a2e;
       color: #e0e0e0;
       border: 1px solid #333;
       padding: 4px 8px;
       font-family: monospace;
-      font-size: 13px;
+      font-size: 12px;
       border-radius: 4px;
+      cursor: pointer;
     }
-    canvas {
-      display: block;
-      image-rendering: pixelated;
+    .ep-btn:hover { background: #2a2a4e; }
+
+    #ep-palette {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      padding: 6px 8px;
+      border-bottom: 1px solid #1a1a2e;
+      flex-shrink: 0;
     }
+    .tile-btn {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      padding: 3px 7px;
+      font-family: monospace;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .tile-btn:hover { background: #2a2a4e; }
+    .tile-btn.active { border-color: #ffd700; color: #ffd700; }
+    .tile-btn .swatch {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 2px;
+      margin-right: 3px;
+      vertical-align: middle;
+    }
+
+    #ep-mode { font-size: 11px; color: #ffd700; padding: 2px 8px; flex-shrink: 0; min-height: 16px; }
+    #ep-error { font-size: 11px; color: #e74c3c; padding: 2px 8px; min-height: 16px; flex-shrink: 0; }
+
+    #ep-textarea {
+      flex: 1;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      border: none;
+      border-top: 1px solid #1a1a2e;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      tab-size: 2;
+      min-height: 0;
+    }
+
+    .ep-actions {
+      display: flex;
+      gap: 6px;
+      padding: 6px 8px;
+      border-top: 1px solid #1a1a2e;
+      flex-shrink: 0;
+    }
+    .ep-actions .ep-btn { flex: 1; text-align: center; }
+    .ep-actions .ep-btn.primary { border-color: #ffd700; color: #ffd700; }
   </style>
 </head>
 <body>
+<div id="app">
+  <!-- Toolbar -->
   <div id="toolbar">
     <label>关卡:</label>
     <select id="levelSelect"></select>
-    <a href="editor.html" style="color:#7f8c8d;font-size:13px;text-decoration:none;border:1px solid #333;padding:4px 10px;border-radius:4px;">编辑器</a>
+    <button class="tb-btn" id="btnEditor">编辑器</button>
   </div>
-  <canvas id="gameCanvas"></canvas>
-  <div id="sequence" style="display:flex;align-items:center;gap:2px;min-height:20px;margin-top:6px;flex-wrap:wrap;"></div>
-  <script type="module" src="src/main.js"></script>
+
+  <!-- Main area: game + optional editor panel -->
+  <div id="main-area">
+    <!-- Game panel -->
+    <div id="game-panel">
+      <div id="canvas-wrapper">
+        <canvas id="gameCanvas"></canvas>
+      </div>
+      <div id="sequence"></div>
+      <!-- D-pad (touch devices) -->
+      <div id="dpad">
+        <div>
+          <div class="dpad-grid">
+            <div class="dpad-btn dpad-empty"></div>
+            <div class="dpad-btn" id="btn-up">▲</div>
+            <div class="dpad-btn dpad-empty"></div>
+            <div class="dpad-btn" id="btn-left">◀</div>
+            <div class="dpad-btn dpad-action" id="btn-undo">↩</div>
+            <div class="dpad-btn" id="btn-right">▶</div>
+            <div class="dpad-btn dpad-empty"></div>
+            <div class="dpad-btn" id="btn-down">▼</div>
+            <div class="dpad-btn dpad-empty"></div>
+          </div>
+          <div class="dpad-actions">
+            <div class="dpad-btn dpad-action" id="btn-restart">重来</div>
+            <div class="dpad-btn dpad-action" id="btn-prev">上关</div>
+            <div class="dpad-btn dpad-action" id="btn-next">下关</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Editor panel (hidden by default) -->
+    <div id="editor-panel">
+      <div class="ep-header">
+        <h2>关卡编辑器</h2>
+        <button class="ep-close" id="ep-close-btn" title="关闭">✕</button>
+      </div>
+      <div class="ep-toolbar">
+        <button class="ep-btn" id="ep-test">▶ 试玩</button>
+        <button class="ep-btn" id="ep-solution">▶ 解法</button>
+        <button class="ep-btn" id="ep-reset">↺ 重置</button>
+      </div>
+      <div id="ep-palette"></div>
+      <div id="ep-mode"></div>
+      <div id="ep-error"></div>
+      <textarea id="ep-textarea" spellcheck="false">// world: 1
+// title: My Level
+// gate: rb
+
+. . b r . #
+S . # # G E
+. . r b . #
+
+// solution: sddddwd
+</textarea>
+      <div class="ep-actions">
+        <button class="ep-btn" id="ep-load-level">加载当前关卡</button>
+        <button class="ep-btn primary" id="ep-save">⬇ 下载 txt</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { Game, DIR } from './src/game.js';
+  import { Renderer } from './src/renderer.js';
+  import { loadLevelsBrowser, parseLevelText } from './src/levels.js';
+
+  // ═══════════════════════════════════════════
+  // Game state
+  // ═══════════════════════════════════════════
+  let currentLevelIndex = 0;
+  let game = null;
+  let renderer = null;
+  let LEVELS = [];
+
+  const COLOR_HEX = { red: '#e74c3c', blue: '#3498db', green: '#2ecc71', yellow: '#f1c40f' };
+
+  function loadLevel(index) {
+    if (index < 0 || index >= LEVELS.length) return;
+    currentLevelIndex = index;
+    game = new Game(LEVELS[index]);
+    gameRender();
+    document.getElementById('levelSelect').value = index;
+  }
+
+  function gameRender() {
+    if (!game || !renderer) return;
+    renderer.render(game.getState());
+    renderSequence();
+  }
+
+  function renderSequence() {
+    const el = document.getElementById('sequence');
+    if (!el || !game) return;
+    const snake = game.getActiveSnake();
+    let html = '';
+    for (const seg of snake) {
+      if (!seg.color) continue;
+      const bg = COLOR_HEX[seg.color] || '#888';
+      const opacity = seg.isShadow ? '0.35' : '1';
+      const border = seg.isPreset ? 'dashed' : 'solid';
+      html += `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${bg};opacity:${opacity};border:1.5px ${border} rgba(255,255,255,0.3);margin:0 1px;" title="${seg.color}"></span>`;
+    }
+    el.innerHTML = html;
+  }
+
+  function gameMoveDir(dir) {
+    if (!game) return;
+    game.move(dir);
+    if (game.phase === 'in_portal' && game.portalGame?.won) game._exitPortal();
+    gameRender();
+  }
+
+  function handleKey(e) {
+    if (!game) return;
+    if (document.activeElement && document.activeElement.id === 'ep-textarea') return;
+    const key = e.key;
+    let handled = true;
+
+    if (key === 'n' || key === 'N') { if (game.won || e.shiftKey) loadLevel(currentLevelIndex + 1); return; }
+    if (key === 'p' || key === 'P') { loadLevel(currentLevelIndex - 1); return; }
+
+    if (game.phase === 'delegate_select') {
+      const idx = parseInt(key) - 1;
+      if (idx >= 0) { game.selectInstruction(idx); gameRender(); }
+      return;
+    }
+
+    const dirMap = {
+      ArrowUp: DIR.UP, ArrowDown: DIR.DOWN,
+      ArrowLeft: DIR.LEFT, ArrowRight: DIR.RIGHT,
+      w: DIR.UP, s: DIR.DOWN, a: DIR.LEFT, d: DIR.RIGHT,
+      W: DIR.UP, S: DIR.DOWN, A: DIR.LEFT, D: DIR.RIGHT,
+    };
+    if (dirMap[key]) gameMoveDir(dirMap[key]);
+    else if (key === 'z' || key === 'Z') { game.undo(); }
+    else if (key === 'r' || key === 'R') { game.restart(); }
+    else if (key === 'Backspace') { game.rewind(); e.preventDefault(); }
+    else if (key === 'Tab') { game.switchBranch(); e.preventDefault(); }
+    else handled = false;
+
+    if (handled) gameRender();
+  }
+
+  // Touch swipe on canvas
+  function initTouchSwipe(canvas) {
+    let sx = 0, sy = 0;
+    canvas.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    canvas.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - sx;
+      const dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) < 28 && Math.abs(dy) < 28) return;
+      gameMoveDir(Math.abs(dx) > Math.abs(dy)
+        ? (dx > 0 ? DIR.RIGHT : DIR.LEFT)
+        : (dy > 0 ? DIR.DOWN : DIR.UP));
+    }, { passive: true });
+  }
+
+  // ═══════════════════════════════════════════
+  // Editor state
+  // ═══════════════════════════════════════════
+  let editorGame = null;
+  let editorLevelDef = null;
+  let selectedTile = null;
+  let editorOpen = false;
+
+  const editorEl = document.getElementById('ep-textarea');
+  const errorEl  = document.getElementById('ep-error');
+  const modeEl   = document.getElementById('ep-mode');
+
+  const TILES = [
+    { token: '.', label: '空', color: null },
+    { token: '#', label: '墙', color: '#0a0a15' },
+    { token: 'S', label: '起', color: null },
+    { token: 'E', label: '终', color: '#ffd700' },
+    { token: 'r', label: '红', color: '#e74c3c' },
+    { token: 'b', label: '蓝', color: '#3498db' },
+    { token: 'g', label: '绿', color: '#2ecc71' },
+    { token: 'y', label: '黄', color: '#f1c40f' },
+    { token: 'G', label: '门', color: '#4a4a5a' },
+    { token: 'C', label: 'C站', color: '#00bcd4' },
+    { token: '!a', label: '!开', color: null },
+    { token: '|a', label: '|墙', color: '#8b4513' },
+    { token: '~', label: '~暗', color: '#8000ff' },
+    { token: 'F', label: 'F叉', color: '#ff9800' },
+    { token: '@', label: '@传', color: '#9b59b6' },
+    { token: '$', label: '$派', color: '#e91e63' },
+    { token: 'Dr', label: 'Dr', color: '#e74c3c' },
+    { token: 'Dg', label: 'Dg', color: '#2ecc71' },
+    { token: '◇', label: '◇', color: '#888' },
+    { token: '*r', label: '★r', color: '#f39c12' },
+  ];
+
+  function buildPalette() {
+    const paletteEl = document.getElementById('ep-palette');
+    for (const tile of TILES) {
+      const btn = document.createElement('button');
+      btn.className = 'tile-btn';
+      btn.dataset.token = tile.token;
+      let inner = '';
+      if (tile.color) inner += `<span class="swatch" style="background:${tile.color}"></span>`;
+      inner += tile.label;
+      btn.innerHTML = inner;
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedTile = tile.token;
+        modeEl.textContent = `画笔: ${tile.label} (${tile.token})`;
+      });
+      paletteEl.appendChild(btn);
+    }
+  }
+
+  function editorParseAndRender() {
+    try {
+      editorLevelDef = parseLevelText(editorEl.value);
+      errorEl.textContent = '';
+      editorGame = new Game(editorLevelDef);
+      gameRender(); // re-render main canvas (editor uses same canvas when open)
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  }
+
+  // The editor paints on the main canvas but uses editorGame for state
+  // We need a separate canvas for editor preview OR we swap game<->editorGame
+  // Simpler: when editor is open, game=editorGame for rendering
+  function editorRenderFull() {
+    if (!renderer) return;
+    if (editorGame) {
+      renderer.render(editorGame.getState());
+    }
+  }
+
+  function isMetaLine(line) {
+    const t = line.trim();
+    return !t || t.startsWith('//');
+  }
+
+  function updateCellInText(gx, gy, token) {
+    const text = editorEl.value;
+    const lines = text.split('\n');
+    const mapStart = lines.findIndex(l => !isMetaLine(l));
+    if (mapStart < 0) return;
+    let mapRow = 0, lineIdx = -1;
+    for (let i = mapStart; i < lines.length; i++) {
+      if (isMetaLine(lines[i])) continue;
+      if (mapRow === gy) { lineIdx = i; break; }
+      mapRow++;
+    }
+    if (lineIdx < 0) return;
+    const tokens = lines[lineIdx].split(/\s+/).filter(t => t.length > 0);
+    while (tokens.length <= gx) tokens.push('.');
+    tokens[gx] = token;
+    lines[lineIdx] = tokens.join(' ');
+    editorEl.value = lines.join('\n');
+    editorParseAndRender();
+  }
+
+  function openEditor() {
+    editorOpen = true;
+    document.getElementById('editor-panel').classList.add('open');
+    document.getElementById('btnEditor').classList.add('active');
+    // Switch rendering to editor game
+    editorParseAndRender();
+    // Canvas click for painting
+    setupEditorCanvasEvents();
+  }
+
+  function closeEditor() {
+    editorOpen = false;
+    document.getElementById('editor-panel').classList.remove('open');
+    document.getElementById('btnEditor').classList.remove('active');
+    editorLevelDef = null;
+    editorGame = null;
+    removeEditorCanvasEvents();
+    // Restore main game rendering
+    if (game) gameRender();
+  }
+
+  let _editorClickHandler = null;
+  let _editorDrawing = false;
+  let _editorMoveHandler = null;
+
+  function setupEditorCanvasEvents() {
+    const canvas = document.getElementById('gameCanvas');
+    removeEditorCanvasEvents();
+
+    _editorClickHandler = (e) => {
+      if (!selectedTile || !editorLevelDef || !renderer) return;
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) / (rect.width / canvas.offsetWidth) - renderer.offsetX;
+      const cy = (e.clientY - rect.top) / (rect.height / canvas.offsetHeight) - renderer.offsetY;
+      const cell = renderer.cell;
+      const gx = Math.floor(cx / cell);
+      const gy = Math.floor(cy / cell);
+      if (gx < 0 || gx >= editorLevelDef.width || gy < 0 || gy >= editorLevelDef.height) return;
+      updateCellInText(gx, gy, selectedTile);
+    };
+
+    canvas.addEventListener('click', _editorClickHandler);
+
+    // Drag drawing
+    canvas.addEventListener('mousedown', () => { _editorDrawing = true; });
+    canvas.addEventListener('mouseup', () => { _editorDrawing = false; });
+    canvas.addEventListener('mouseleave', () => { _editorDrawing = false; });
+    _editorMoveHandler = (e) => {
+      if (!_editorDrawing) return;
+      _editorClickHandler(e);
+    };
+    canvas.addEventListener('mousemove', _editorMoveHandler);
+  }
+
+  function removeEditorCanvasEvents() {
+    const canvas = document.getElementById('gameCanvas');
+    if (_editorClickHandler) canvas.removeEventListener('click', _editorClickHandler);
+    if (_editorMoveHandler) canvas.removeEventListener('mousemove', _editorMoveHandler);
+    _editorClickHandler = null;
+    _editorMoveHandler = null;
+  }
+
+  // Override gameRender when editor is open
+  const _origGameRender = () => {
+    if (!renderer) return;
+    if (editorOpen && editorGame) {
+      renderer.render(editorGame.getState());
+    } else if (game) {
+      renderer.render(game.getState());
+      renderSequence();
+    }
+  };
+
+  // ═══════════════════════════════════════════
+  // DOMContentLoaded init
+  // ═══════════════════════════════════════════
+  window.addEventListener('DOMContentLoaded', async () => {
+    const canvas = document.getElementById('gameCanvas');
+    renderer = new Renderer(canvas);
+
+    window.addEventListener('resize', () => {
+      if (editorOpen && editorGame) editorRenderFull();
+      else if (game) gameRender();
+    });
+
+    // Load levels
+    LEVELS = await loadLevelsBrowser();
+
+    const select = document.getElementById('levelSelect');
+    if (LEVELS.length === 0) {
+      const opt = document.createElement('option');
+      opt.textContent = '（无法加载关卡，请通过 HTTP 服务器打开）';
+      select.appendChild(opt);
+    } else {
+      LEVELS.forEach((level, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `${level.world}. ${level.title}`;
+        select.appendChild(opt);
+      });
+      select.addEventListener('change', e => loadLevel(parseInt(e.target.value)));
+      loadLevel(0);
+    }
+
+    window.addEventListener('keydown', handleKey);
+    initTouchSwipe(canvas);
+
+    // D-pad wiring
+    const dpadActions = {
+      'btn-up':      () => gameMoveDir(DIR.UP),
+      'btn-down':    () => gameMoveDir(DIR.DOWN),
+      'btn-left':    () => gameMoveDir(DIR.LEFT),
+      'btn-right':   () => gameMoveDir(DIR.RIGHT),
+      'btn-undo':    () => { if (game) { game.undo(); gameRender(); } },
+      'btn-restart': () => { if (game) { game.restart(); gameRender(); } },
+      'btn-prev':    () => loadLevel(currentLevelIndex - 1),
+      'btn-next':    () => loadLevel(currentLevelIndex + 1),
+    };
+    for (const [id, fn] of Object.entries(dpadActions)) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.addEventListener('click', fn);
+      el.addEventListener('touchstart', e => { e.preventDefault(); fn(); }, { passive: false });
+    }
+
+    // Editor toggle
+    document.getElementById('btnEditor').addEventListener('click', () => {
+      editorOpen ? closeEditor() : openEditor();
+    });
+    document.getElementById('ep-close-btn').addEventListener('click', closeEditor);
+
+    // Build tile palette
+    buildPalette();
+
+    // Editor textarea live parse
+    let debounce = null;
+    editorEl.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(editorParseAndRender, 300);
+    });
+
+    // Editor buttons
+    document.getElementById('ep-test').addEventListener('click', () => {
+      selectedTile = null;
+      document.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('active'));
+      modeEl.textContent = '试玩模式';
+      editorParseAndRender();
+    });
+
+    document.getElementById('ep-reset').addEventListener('click', () => {
+      if (editorGame) { editorGame.restart(); editorRenderFull(); }
+    });
+
+    document.getElementById('ep-solution').addEventListener('click', () => {
+      editorParseAndRender();
+      if (!editorLevelDef?.solution || !editorGame) {
+        errorEl.textContent = '没有解法（在 // solution: 中定义）';
+        return;
+      }
+      errorEl.textContent = '';
+      const DM = { w: DIR.UP, a: DIR.LEFT, s: DIR.DOWN, d: DIR.RIGHT };
+      let i = 0;
+      const sol = editorLevelDef.solution;
+      function step() {
+        if (i >= sol.length || editorGame.won) { editorRenderFull(); return; }
+        const ch = sol[i++];
+        if (DM[ch]) {
+          const r = editorGame.move(DM[ch]);
+          if (!r.success && editorGame.phase !== 'won') {
+            errorEl.textContent = `解法失败: 步骤 ${i} '${ch}': ${r.reason}`;
+            editorRenderFull(); return;
+          }
+        } else if (ch === '<') editorGame.rewind();
+        else if (ch === 't') editorGame.switchBranch();
+        else if ('123'.includes(ch)) {
+          const idx = parseInt(ch) - 1;
+          if (editorGame.phase === 'merge_select') editorGame.selectBranch(idx);
+          else if (editorGame.phase === 'delegate_select') editorGame.selectInstruction(idx);
+        }
+        editorRenderFull();
+        setTimeout(step, 150);
+      }
+      step();
+    });
+
+    // Load current game level into editor
+    document.getElementById('ep-load-level').addEventListener('click', async () => {
+      if (LEVELS.length === 0) return;
+      // Fetch the raw txt for current level
+      const LEVEL_FILES = [
+        '1-growth','2-echo','3-prism','4-shadow','5-fork',
+        '6-rewind','7-forgetting','8-portal','9-subagent',
+      ];
+      const name = LEVEL_FILES[currentLevelIndex];
+      if (!name) return;
+      try {
+        const txt = await (await fetch(`levels/${name}.txt`)).text();
+        editorEl.value = txt;
+        editorParseAndRender();
+      } catch (e) {
+        errorEl.textContent = '加载失败: ' + e.message;
+      }
+    });
+
+    // Save / download as txt file
+    document.getElementById('ep-save').addEventListener('click', () => {
+      const txt = editorEl.value;
+      const blob = new Blob([txt], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Try to name it sensibly based on title
+      const titleMatch = txt.match(/\/\/\s*title\s*:\s*(.+)/);
+      const title = titleMatch ? titleMatch[1].trim().replace(/[^a-z0-9\u4e00-\u9fff]/gi, '-') : 'level';
+      a.download = `${title}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Keyboard in editor: play mode when not focused on textarea
+    window.addEventListener('keydown', (e) => {
+      if (!editorOpen || !editorGame) return;
+      if (document.activeElement === editorEl) return;
+      const DM = {
+        ArrowUp: DIR.UP, ArrowDown: DIR.DOWN, ArrowLeft: DIR.LEFT, ArrowRight: DIR.RIGHT,
+        w: DIR.UP, s: DIR.DOWN, a: DIR.LEFT, d: DIR.RIGHT,
+      };
+      if (DM[e.key]) {
+        editorGame.move(DM[e.key]);
+        if (editorGame.phase === 'in_portal' && editorGame.portalGame?.won) editorGame._exitPortal();
+        editorRenderFull(); e.preventDefault();
+      } else if (e.key === 'z' || e.key === 'Z') { editorGame.undo(); editorRenderFull(); }
+      else if (e.key === 'r' || e.key === 'R') { editorGame.restart(); editorRenderFull(); }
+      else if (e.key === 'Backspace') { editorGame.rewind(); editorRenderFull(); e.preventDefault(); }
+      else if (e.key === 'Escape') {
+        selectedTile = null;
+        document.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('active'));
+        modeEl.textContent = '';
+      }
+    });
+  });
+</script>
 </body>
 </html>

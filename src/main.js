@@ -11,13 +11,18 @@ let LEVELS = [];
 
 const COLOR_HEX = { red: '#e74c3c', blue: '#3498db', green: '#2ecc71', yellow: '#f1c40f' };
 
-function loadLevel(index) {
+export function loadLevel(index) {
   if (index < 0 || index >= LEVELS.length) return;
   currentLevelIndex = index;
   game = new Game(LEVELS[index]);
   render();
-  document.getElementById('levelSelect').value = index;
+  const sel = document.getElementById('levelSelect');
+  if (sel) sel.value = index;
 }
+
+export function getGame() { return game; }
+export function getCurrentLevelIndex() { return currentLevelIndex; }
+export function getLevels() { return LEVELS; }
 
 function render() {
   if (!game || !renderer) return;
@@ -40,8 +45,11 @@ function renderSequence() {
   el.innerHTML = html;
 }
 
-function handleKey(e) {
+export function handleKey(e) {
   if (!game) return;
+  // Don't capture keys when editor textarea is focused
+  if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+
   const key = e.key;
   let handled = true;
 
@@ -54,7 +62,6 @@ function handleKey(e) {
     return;
   }
 
-  // Delegate instruction selection
   if (game.phase === 'delegate_select') {
     const idx = parseInt(key) - 1;
     if (idx >= 0) game.selectInstruction(idx);
@@ -81,10 +88,40 @@ function handleKey(e) {
   if (handled) render();
 }
 
+function move(dir) {
+  if (!game) return;
+  game.move(dir);
+  if (game.phase === 'in_portal' && game.portalGame?.won) game._exitPortal();
+  render();
+}
+
+// Touch swipe support on canvas
+function initTouchSwipe(canvas) {
+  let startX = 0, startY = 0;
+  canvas.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  canvas.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    const minSwipe = 30;
+    if (Math.abs(dx) < minSwipe && Math.abs(dy) < minSwipe) return;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      move(dx > 0 ? DIR.RIGHT : DIR.LEFT);
+    } else {
+      move(dy > 0 ? DIR.DOWN : DIR.UP);
+    }
+  }, { passive: true });
+}
+
 // Init
 window.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas');
   renderer = new Renderer(canvas);
+
+  // Redraw on resize
+  window.addEventListener('resize', () => { if (game) render(); });
 
   LEVELS = await loadLevelsBrowser();
 
@@ -97,5 +134,27 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   select.addEventListener('change', (e) => loadLevel(parseInt(e.target.value)));
   window.addEventListener('keydown', handleKey);
+
+  // D-pad buttons
+  const btnMap = {
+    'btn-up':      () => move(DIR.UP),
+    'btn-down':    () => move(DIR.DOWN),
+    'btn-left':    () => move(DIR.LEFT),
+    'btn-right':   () => move(DIR.RIGHT),
+    'btn-undo':    () => { game?.undo(); render(); },
+    'btn-restart': () => { game?.restart(); render(); },
+    'btn-prev':    () => loadLevel(currentLevelIndex - 1),
+    'btn-next':    () => { if (game?.won || true) loadLevel(currentLevelIndex + 1); },
+  };
+  for (const [id, fn] of Object.entries(btnMap)) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', fn);
+      // touchstart for faster response
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); fn(); }, { passive: false });
+    }
+  }
+
+  initTouchSwipe(canvas);
   loadLevel(0);
 });

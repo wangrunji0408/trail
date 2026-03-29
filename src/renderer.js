@@ -1,22 +1,28 @@
 // TRAIL - Canvas Renderer
 
-const CELL = 56;
+const CELL_DEFAULT = 56;
 const PAD = 1;
 const RADIUS = 6;
 
+// Compute cell size so the grid fits within the available area.
+function computeCell(gridW, gridH, availW, availH) {
+  const headerH = 44;
+  const footerH = 80;
+  const maxCellW = Math.floor((availW - 16) / gridW);
+  const maxCellH = Math.floor((availH - headerH - footerH) / gridH);
+  return Math.max(24, Math.min(CELL_DEFAULT, maxCellW, maxCellH));
+}
+
 const PALETTE = {
   bg: '#0f0e17',
-  gridBg: '#1a1a2e',
-  gridLine: '#16213e',
   wall: '#0a0a15',
   empty: '#16213e',
   exit: '#ffd700',
   exitGlow: 'rgba(255,215,0,0.25)',
   snakeDefault: '#e0e0e0',
   snakeHead: '#ffffff',
-  snakePreset: 'rgba(255,255,255,0.35)',
   shadowOverlay: 'rgba(128,0,255,0.15)',
-  shadowSeg: 0.35, // alpha for shadow segments
+  shadowSeg: 0.35,
   red: '#e74c3c',
   blue: '#3498db',
   green: '#2ecc71',
@@ -27,12 +33,9 @@ const PALETTE = {
   switchWallClosed: '#8b4513',
   switchWallOpen: 'rgba(139,69,19,0.2)',
   checkpoint: '#00bcd4',
-  prism: '#e8e8e8',
   fork: '#ff9800',
-  merge: '#ff9800',
   portal: '#9b59b6',
   delegate: '#e91e63',
-  memoryStoneBg: '#2c3e50',
   memoryStoneActive: '#f39c12',
   text: '#e0e0e0',
   textDim: '#7f8c8d',
@@ -49,17 +52,29 @@ export class Renderer {
     this.ctx = canvas.getContext('2d');
     this.offsetX = 0;
     this.offsetY = 0;
+    this.cell = CELL_DEFAULT;
   }
 
   render(state) {
     const ctx = this.ctx;
     const { width, height } = state;
-    const gridW = width * CELL;
-    const gridH = height * CELL;
 
-    // Size canvas
-    const canvasW = Math.max(gridW + 80, 500);
-    const canvasH = gridH + 180;
+    // Determine available space from wrapper element
+    const wrapper = this.canvas.parentElement;
+    const availW = wrapper ? wrapper.clientWidth : window.innerWidth;
+    const availH = wrapper ? wrapper.clientHeight : window.innerHeight;
+
+    const cell = computeCell(width, height, availW, availH);
+    this.cell = cell;
+
+    const headerH = 44;
+    const footerH = 80;
+    const gridW = width * cell;
+    const gridH = height * cell;
+
+    const canvasW = Math.max(gridW + 40, Math.min(availW, 800));
+    const canvasH = gridH + headerH + footerH;
+
     this.canvas.width = canvasW * devicePixelRatio;
     this.canvas.height = canvasH * devicePixelRatio;
     this.canvas.style.width = canvasW + 'px';
@@ -72,242 +87,230 @@ export class Renderer {
 
     // Center grid
     this.offsetX = Math.floor((canvasW - gridW) / 2);
-    this.offsetY = 70;
+    this.offsetY = headerH;
 
     // Header
-    this._drawHeader(ctx, state, canvasW);
+    this._drawHeader(ctx, state, canvasW, headerH);
 
     ctx.save();
     ctx.translate(this.offsetX, this.offsetY);
-
-    // Grid cells
-    this._drawGrid(ctx, state);
-
-    // Snakes
+    this._drawGrid(ctx, state, cell);
     for (const { snake, active } of state.snakes) {
-      this._drawSnake(ctx, snake, active, state);
+      this._drawSnake(ctx, snake, active, state, cell);
     }
-
     ctx.restore();
 
     // Footer
-    this._drawFooter(ctx, state, canvasW, this.offsetY + gridH + 16);
+    this._drawFooter(ctx, state, canvasW, this.offsetY + gridH + 10);
 
     // Portal overlay
     if (state.portalGame) {
-      this._drawPortalOverlay(ctx, state.portalGame.getState(), canvasW, canvasH);
+      this._drawPortalOverlay(ctx, state.portalGame.getState(), canvasW, canvasH, cell);
     }
   }
 
-  _drawHeader(ctx, state, canvasW) {
+  _drawHeader(ctx, state, canvasW, headerH) {
+    const midY = Math.floor(headerH / 2) + 4;
     ctx.fillStyle = PALETTE.textDim;
-    ctx.font = '13px monospace';
+    ctx.font = '12px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`World ${state.world}`, 20, 24);
+    ctx.fillText(`World ${state.world}`, 10, midY);
 
     ctx.fillStyle = PALETTE.text;
-    ctx.font = 'bold 20px monospace';
+    ctx.font = 'bold 16px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(state.title || '', canvasW / 2, 28);
+    ctx.fillText(state.title || '', canvasW / 2, midY);
 
     ctx.fillStyle = PALETTE.textDim;
-    ctx.font = '13px monospace';
+    ctx.font = '12px monospace';
     ctx.textAlign = 'right';
-    const phaseText = {      forked: `分支 ${state.activeBranch + 1}`,
+    const phaseText = {
+      forked: `分支 ${state.activeBranch + 1}`,
       merge_select: '选择分支',
       in_portal: '📦 子空间',
       delegate_select: '📋 选择指令',
       won: '✓ 通关',
     }[state.phase] || '';
-    ctx.fillText(phaseText, canvasW - 20, 24);
+    ctx.fillText(phaseText, canvasW - 10, midY);
   }
 
-  _drawGrid(ctx, state) {
+  _drawGrid(ctx, state, cell = CELL_DEFAULT) {
     const { grid, width, height, switchState, memoryStoneColors } = state;
+    const radius = Math.max(3, Math.floor(cell * RADIUS / CELL_DEFAULT));
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const cell = grid[y][x];
-        const cx = x * CELL, cy = y * CELL;
+        const c = grid[y][x];
+        const cx = x * cell, cy = y * cell;
 
-        // Base fill
         let fill = PALETTE.empty;
-        if (cell.type === 'wall') fill = PALETTE.wall;
-        else if (cell.type === 'color') fill = this._colorFill(cell.color, 0.35);
-        else if (cell.type === 'exit') fill = PALETTE.exitGlow;
-        else if (cell.type === 'gate') fill = PALETTE.gate;
-        else if (cell.type === 'switch') fill = PALETTE.empty;
-        else if (cell.type === 'switch_wall') fill = switchState[cell.switchId] ? PALETTE.switchWallOpen : PALETTE.switchWallClosed;
-        else if (cell.type === 'checkpoint') fill = 'rgba(0,188,212,0.15)';
-        else if (cell.type === 'dye') fill = this._colorFill(cell.color, 0.25);
-        else if (cell.type === 'wildcard') fill = 'rgba(200,200,200,0.15)';
-        else if (cell.type === 'fork') fill = PALETTE.empty;
-        else if (cell.type === 'merge') fill = PALETTE.empty;
-        else if (cell.type === 'portal') fill = 'rgba(155,89,182,0.2)';
-        else if (cell.type === 'delegate') fill = 'rgba(233,30,99,0.2)';
+        if (c.type === 'wall') fill = PALETTE.wall;
+        else if (c.type === 'color') fill = this._colorFill(c.color, 0.35);
+        else if (c.type === 'exit') fill = PALETTE.exitGlow;
+        else if (c.type === 'gate') fill = PALETTE.gate;
+        else if (c.type === 'switch_wall') fill = switchState[c.switchId] ? PALETTE.switchWallOpen : PALETTE.switchWallClosed;
+        else if (c.type === 'checkpoint') fill = 'rgba(0,188,212,0.15)';
+        else if (c.type === 'dye') fill = this._colorFill(c.color, 0.25);
+        else if (c.type === 'wildcard') fill = 'rgba(200,200,200,0.15)';
+        else if (c.type === 'portal') fill = 'rgba(155,89,182,0.2)';
+        else if (c.type === 'delegate') fill = 'rgba(233,30,99,0.2)';
 
-        this._fillRoundRect(ctx, cx + PAD, cy + PAD, CELL - PAD * 2, CELL - PAD * 2, RADIUS, fill);
+        this._fillRoundRect(ctx, cx + PAD, cy + PAD, cell - PAD * 2, cell - PAD * 2, radius, fill);
 
-        // Memory stone background
-        if (cell.memoryStone) {
+        if (c.memoryStone) {
           const key = `${x},${y}`;
           const stored = memoryStoneColors[key];
           ctx.save();
           if (stored) {
-            ctx.fillStyle = colorVal(stored);
             ctx.globalAlpha = 0.3;
-            this._fillRoundRect(ctx, cx + PAD, cy + PAD, CELL - PAD * 2, CELL - PAD * 2, RADIUS, colorVal(stored));
+            this._fillRoundRect(ctx, cx + PAD, cy + PAD, cell - PAD * 2, cell - PAD * 2, radius, colorVal(stored));
             ctx.globalAlpha = 1;
           }
-          // Star marker
           ctx.fillStyle = stored ? PALETTE.memoryStoneActive : PALETTE.textDim;
-          ctx.font = '18px monospace';
+          ctx.font = `${Math.floor(cell * 0.35)}px monospace`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText('★', cx + CELL / 2, cy + CELL / 2);
+          ctx.fillText('★', cx + cell / 2, cy + cell / 2);
           ctx.restore();
         }
 
-        // Shadow overlay
-        if (cell.shadow) {
-          ctx.fillStyle = PALETTE.shadowOverlay;
-          this._fillRoundRect(ctx, cx + PAD, cy + PAD, CELL - PAD * 2, CELL - PAD * 2, RADIUS, PALETTE.shadowOverlay);
+        if (c.shadow) {
+          this._fillRoundRect(ctx, cx + PAD, cy + PAD, cell - PAD * 2, cell - PAD * 2, radius, PALETTE.shadowOverlay);
         }
 
-        // Special markers
-        this._drawCellMarker(ctx, cell, cx, cy, state);
+        this._drawCellMarker(ctx, c, cx, cy, state, cell);
       }
     }
   }
 
-  _drawCellMarker(ctx, cell, cx, cy, state) {
-    const mx = cx + CELL / 2, my = cy + CELL / 2;
+  _drawCellMarker(ctx, c, cx, cy, state, cell = CELL_DEFAULT) {
+    const mx = cx + cell / 2, my = cy + cell / 2;
+    const fs = Math.max(10, Math.floor(cell * 0.38));
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    if (cell.type === 'exit') {
+    if (c.type === 'exit') {
       ctx.fillStyle = PALETTE.exit;
-      ctx.font = 'bold 22px monospace';
+      ctx.font = `bold ${fs}px monospace`;
       ctx.fillText('⚑', mx, my);
     }
-    if (cell.type === 'gate') {
-      const p = cell.pattern;
-      const dotR = 6;
-      const totalW = p.length * dotR * 2 + (p.length - 1) * 3;
+    if (c.type === 'gate') {
+      const p = c.pattern;
+      const dotR = Math.max(3, Math.floor(cell * 0.1));
+      const gap = Math.max(2, Math.floor(cell * 0.05));
+      const totalW = p.length * dotR * 2 + (p.length - 1) * gap;
       let sx = mx - totalW / 2 + dotR;
-      for (const c of p) {
+      for (const col of p) {
         ctx.beginPath();
         ctx.arc(sx, my, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = colorVal(c);
+        ctx.fillStyle = colorVal(col);
         ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 1;
         ctx.stroke();
-        sx += dotR * 2 + 3;
+        sx += dotR * 2 + gap;
       }
     }
-    if (cell.type === 'checkpoint') {
+    if (c.type === 'checkpoint') {
       ctx.fillStyle = PALETTE.checkpoint;
-      ctx.font = 'bold 15px monospace';
+      ctx.font = `bold ${Math.max(9, fs - 4)}px monospace`;
       ctx.fillText('</>', mx, my);
     }
-    if (cell.type === 'dye') {
-      ctx.fillStyle = colorVal(cell.color);
-      ctx.font = 'bold 20px monospace';
+    if (c.type === 'dye') {
+      ctx.fillStyle = colorVal(c.color);
+      ctx.font = `bold ${fs}px monospace`;
       ctx.fillText('▼', mx, my);
     }
-    if (cell.type === 'wildcard') {
+    if (c.type === 'wildcard') {
       ctx.fillStyle = PALETTE.textDim;
-      ctx.font = '20px monospace';
+      ctx.font = `${fs}px monospace`;
       ctx.fillText('◇', mx, my);
     }
-    if (cell.type === 'echo_gate') {
+    if (c.type === 'echo_gate') {
+      const eFs = Math.max(8, fs - 5);
       ctx.fillStyle = PALETTE.checkpoint;
-      ctx.font = '11px monospace';
-      ctx.fillText('echo', mx, my - 8);
-      const p = cell.requires;
-      const dotR = 5;
-      let sx = mx - ((p.length * dotR * 2 + (p.length - 1) * 3) / 2) + dotR;
-      for (const c of p) {
+      ctx.font = `${eFs}px monospace`;
+      ctx.fillText('echo', mx, my - cell * 0.15);
+      const p = c.requires;
+      const dotR = Math.max(3, Math.floor(cell * 0.08));
+      let sx = mx - ((p.length * dotR * 2 + (p.length - 1) * 2) / 2) + dotR;
+      for (const col of p) {
         ctx.beginPath();
-        ctx.arc(sx, my + 8, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = colorVal(c);
+        ctx.arc(sx, my + cell * 0.15, dotR, 0, Math.PI * 2);
+        ctx.fillStyle = colorVal(col);
         ctx.fill();
-        sx += dotR * 2 + 3;
+        sx += dotR * 2 + 2;
       }
     }
-    if (cell.type === 'switch') {
-      const on = state.switchState[cell.switchId];
+    if (c.type === 'switch') {
+      const on = state.switchState[c.switchId];
       ctx.fillStyle = on ? PALETTE.switchOn : PALETTE.switchOff;
-      ctx.font = '20px monospace';
+      ctx.font = `${fs}px monospace`;
       ctx.fillText(on ? '◆' : '◇', mx, my);
-      if (cell.permanent) {
+      if (c.permanent) {
         ctx.fillStyle = PALETTE.textDim;
-        ctx.font = '9px monospace';
-        ctx.fillText('perm', mx, my + 16);
+        ctx.font = `${Math.max(7, fs - 8)}px monospace`;
+        ctx.fillText('perm', mx, my + cell * 0.3);
       }
     }
-    if (cell.type === 'switch_wall') {
-      const open = state.switchState[cell.switchId];
+    if (c.type === 'switch_wall') {
+      const open = state.switchState[c.switchId];
       if (!open) {
-        // Draw bars
         ctx.strokeStyle = PALETTE.switchWallClosed;
-        ctx.lineWidth = 3;
-        for (let i = 0; i < 3; i++) {
-          const bx = cx + 12 + i * 14;
+        ctx.lineWidth = Math.max(2, cell * 0.05);
+        const barCount = 3;
+        const barSpacing = (cell - 8) / (barCount + 1);
+        for (let i = 1; i <= barCount; i++) {
+          const bx = cx + barSpacing * i;
           ctx.beginPath();
-          ctx.moveTo(bx, cy + 8);
-          ctx.lineTo(bx, cy + CELL - 8);
+          ctx.moveTo(bx, cy + 6);
+          ctx.lineTo(bx, cy + cell - 6);
           ctx.stroke();
         }
       }
     }
-    if (cell.type === 'fork') {
+    if (c.type === 'fork') {
       ctx.fillStyle = PALETTE.fork;
-      ctx.font = 'bold 20px monospace';
+      ctx.font = `bold ${fs}px monospace`;
       ctx.fillText('⑂', mx, my);
     }
-    if (cell.type === 'portal') {
+    if (c.type === 'portal') {
       ctx.fillStyle = PALETTE.portal;
-      ctx.font = '22px monospace';
+      ctx.font = `${fs}px monospace`;
       ctx.fillText('◎', mx, my);
     }
-    if (cell.type === 'delegate') {
+    if (c.type === 'delegate') {
       ctx.fillStyle = PALETTE.delegate;
-      ctx.font = '20px monospace';
+      ctx.font = `${fs}px monospace`;
       ctx.fillText('⊕', mx, my);
     }
   }
 
-  _drawSnake(ctx, snake, active, state) {
+  _drawSnake(ctx, snake, active, state, cell = CELL_DEFAULT) {
     if (snake.length === 0) return;
 
-    // Draw connections (only between grid-adjacent consecutive segments)
     for (let i = 0; i < snake.length - 1; i++) {
       const a = snake[i], b = snake[i + 1];
       if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) continue;
-      this._drawConnection(ctx, a, b, active);
+      this._drawConnection(ctx, a, b, active, cell);
     }
 
-    // Draw extra connections (from fork merges)
     if (active && state.extraConnections) {
       for (const [a, b] of state.extraConnections) {
-        this._drawConnection(ctx, a, b, active);
+        this._drawConnection(ctx, a, b, active, cell);
       }
     }
 
-    // Draw segments
     for (let i = 0; i < snake.length; i++) {
       const seg = snake[i];
-      const sx = seg.x * CELL + CELL / 2;
-      const sy = seg.y * CELL + CELL / 2;
+      const sx = seg.x * cell + cell / 2;
+      const sy = seg.y * cell + cell / 2;
       const isHead = (i === snake.length - 1);
-      const r = isHead ? 14 : 11;
+      const r = Math.max(6, Math.floor(cell * (isHead ? 0.26 : 0.20)));
 
       ctx.save();
       if (seg.isShadow) ctx.globalAlpha = PALETTE.shadowSeg;
       if (!active) ctx.globalAlpha *= 0.5;
 
-      // Fill
       let fill = seg.color ? colorVal(seg.color) : PALETTE.snakeDefault;
       if (isHead) fill = PALETTE.snakeHead;
       ctx.beginPath();
@@ -315,14 +318,11 @@ export class Renderer {
       ctx.fillStyle = fill;
       ctx.fill();
 
-      // Color ring for head
       if (isHead && seg.color) {
         ctx.strokeStyle = colorVal(seg.color);
-        ctx.lineWidth = 3;
+        ctx.lineWidth = Math.max(2, cell * 0.05);
         ctx.stroke();
       }
-
-      // Preset border (dashed)
       if (seg.isPreset) {
         ctx.setLineDash([3, 3]);
         ctx.strokeStyle = 'rgba(255,255,255,0.6)';
@@ -330,11 +330,9 @@ export class Renderer {
         ctx.stroke();
         ctx.setLineDash([]);
       }
-
-      // Shadow segments: hatch pattern
       if (seg.isShadow && seg.color) {
         ctx.strokeStyle = colorVal(seg.color);
-        ctx.lineWidth = 3;
+        ctx.lineWidth = Math.max(2, cell * 0.05);
         ctx.stroke();
       }
 
@@ -345,22 +343,40 @@ export class Renderer {
   _drawFooter(ctx, state, canvasW, footerY) {
     ctx.textAlign = 'center';
 
-    // Message
-    if (state.message) {
-      ctx.fillStyle = PALETTE.textHighlight;
-      ctx.font = '14px monospace';
-      ctx.fillText(state.message, canvasW / 2, footerY + 10);
+    if (state.won) {
+      ctx.fillStyle = PALETTE.exit;
+      ctx.font = 'bold 18px monospace';
+      ctx.fillText('✓ 通关！按 N 进入下一关', canvasW / 2, footerY + 14);
+      return;
     }
 
-    // Max length indicator
+    if (state.phase === 'delegate_select' && state.delegateInstructions) {
+      ctx.fillStyle = PALETTE.text;
+      ctx.font = '13px monospace';
+      ctx.fillText('为子代理选择指令:', canvasW / 2, footerY + 10);
+      const instrs = state.delegateInstructions;
+      for (let i = 0; i < instrs.length; i++) {
+        ctx.fillStyle = PALETTE.text;
+        ctx.font = '12px monospace';
+        ctx.fillText(`[${i + 1}] ${instrs[i].label}  ${instrs[i].desc}`, canvasW / 2, footerY + 28 + i * 16);
+      }
+      return;
+    }
+
+    let y = footerY + 14;
+    if (state.message) {
+      ctx.fillStyle = PALETTE.textHighlight;
+      ctx.font = '13px monospace';
+      ctx.fillText(state.message, canvasW / 2, y);
+      y += 18;
+    }
     if (state.maxLength < Infinity) {
       const snake = state.snakes[0]?.snake || [];
       ctx.fillStyle = PALETTE.textDim;
       ctx.font = '12px monospace';
-      ctx.fillText(`蛇身: ${snake.length} / ${state.maxLength}`, canvasW / 2, footerY + 30);
+      ctx.fillText(`蛇身: ${snake.length} / ${state.maxLength}`, canvasW / 2, y);
+      y += 16;
     }
-
-    // Preset colors display
     if (state.presetColors?.length > 0) {
       ctx.fillStyle = PALETTE.textDim;
       ctx.font = '12px monospace';
@@ -370,87 +386,51 @@ export class Renderer {
       const totalW = labelW + state.presetColors.length * (dotR * 2 + 4);
       let sx = canvasW / 2 - totalW / 2;
       ctx.textAlign = 'left';
-      ctx.fillText(label, sx, footerY + 50);
+      ctx.fillText(label, sx, y);
       sx += labelW + 4;
       for (const c of state.presetColors) {
         ctx.beginPath();
-        ctx.arc(sx + dotR, footerY + 46, dotR, 0, Math.PI * 2);
+        ctx.arc(sx + dotR, y - 4, dotR, 0, Math.PI * 2);
         ctx.fillStyle = colorVal(c);
         ctx.fill();
         sx += dotR * 2 + 4;
       }
     }
-
-    // Controls help
-    ctx.fillStyle = PALETTE.textDim;
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'center';
-    let controlsY = footerY + 72;
-    ctx.fillText('方向键:移动(反向=撤销)  R:重来  N:下一关', canvasW / 2, controlsY);
-
-    // Delegate selector
-    if (state.phase === 'delegate_select' && state.delegateInstructions) {
-      ctx.fillStyle = PALETTE.text;
-      ctx.font = '14px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('为子代理选择指令:', canvasW / 2, footerY + 10);
-      const instrs = state.delegateInstructions;
-      for (let i = 0; i < instrs.length; i++) {
-        ctx.fillStyle = PALETTE.text;
-        ctx.font = '13px monospace';
-        ctx.fillText(`[${i + 1}] ${instrs[i].label}  ${instrs[i].desc}`, canvasW / 2, footerY + 32 + i * 18);
-      }
-    }
-
-    // Won state
-    if (state.won) {
-      ctx.fillStyle = PALETTE.exit;
-      ctx.font = 'bold 22px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('✓ 通关！', canvasW / 2, footerY + 10);
-      ctx.fillStyle = PALETTE.textDim;
-      ctx.font = '13px monospace';
-      ctx.fillText('按 N 进入下一关', canvasW / 2, footerY + 34);
-    }
   }
 
-  _drawPortalOverlay(ctx, subState, canvasW, canvasH) {
-    // Dim background
+  _drawPortalOverlay(ctx, subState, canvasW, canvasH, cell = CELL_DEFAULT) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, canvasW, canvasH);
 
-    // Draw sub-grid centered
-    const subGridW = subState.width * CELL;
-    const subGridH = subState.height * CELL;
+    const subCell = computeCell(subState.width, subState.height, canvasW * 0.8, canvasH * 0.7);
+    const subGridW = subState.width * subCell;
+    const subGridH = subState.height * subCell;
     const sx = Math.floor((canvasW - subGridW) / 2);
     const sy = Math.floor((canvasH - subGridH) / 2);
 
-    // Border
     ctx.strokeStyle = PALETTE.portal;
     ctx.lineWidth = 3;
-    ctx.strokeRect(sx - 8, sy - 30, subGridW + 16, subGridH + 46);
+    ctx.strokeRect(sx - 8, sy - 26, subGridW + 16, subGridH + 36);
 
-    // Title
     ctx.fillStyle = PALETTE.portal;
-    ctx.font = 'bold 14px monospace';
+    ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(subState.title || '子空间', canvasW / 2, sy - 12);
+    ctx.fillText(subState.title || '子空间', canvasW / 2, sy - 10);
 
     ctx.save();
     ctx.translate(sx, sy);
-    this._drawGrid(ctx, subState);
+    this._drawGrid(ctx, subState, subCell);
     for (const { snake, active } of subState.snakes) {
-      this._drawSnake(ctx, snake, active, subState);
+      this._drawSnake(ctx, snake, active, subState, subCell);
     }
     ctx.restore();
   }
 
-  // Helpers
-  _drawConnection(ctx, a, b, active) {
-    const ax = a.x * CELL + CELL / 2, ay = a.y * CELL + CELL / 2;
-    const bx = b.x * CELL + CELL / 2, by = b.y * CELL + CELL / 2;
+  _drawConnection(ctx, a, b, active, cell = CELL_DEFAULT) {
+    const ax = a.x * cell + cell / 2, ay = a.y * cell + cell / 2;
+    const bx = b.x * cell + cell / 2, by = b.y * cell + cell / 2;
     ctx.strokeStyle = active ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 8;
+    ctx.lineWidth = Math.max(4, cell * 0.14);
     ctx.beginPath();
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
@@ -467,7 +447,6 @@ export class Renderer {
   _colorFill(color, alpha) {
     const hex = PALETTE[color] || '#888';
     if (alpha >= 1) return hex;
-    // Convert hex to rgba
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
