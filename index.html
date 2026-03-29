@@ -300,6 +300,37 @@
     @media (min-width: 601px) {
       #ep-source-toggle { display: none; }
     }
+
+    /* Size controls */
+    #ep-size {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-bottom: 1px solid #1a1a2e;
+      flex-shrink: 0;
+      font-size: 12px;
+      color: #7f8c8d;
+      flex-wrap: wrap;
+    }
+    #ep-size span { color: #e0e0e0; }
+    .size-btn {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      width: 22px;
+      height: 22px;
+      font-size: 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      line-height: 1;
+    }
+    .size-btn:hover { background: #2a2a4e; }
+    #ep-size .sep { color: #333; margin: 0 2px; }
   </style>
 </head>
 <body>
@@ -308,6 +339,7 @@
   <div id="toolbar">
     <label>关卡:</label>
     <select id="levelSelect"></select>
+    <button class="tb-btn" id="btnNewLevel">+ 新关卡</button>
     <button class="tb-btn" id="btnEditor">编辑器</button>
   </div>
 
@@ -354,6 +386,17 @@
         <button class="ep-btn" id="ep-reset">↺ 重置</button>
       </div>
       <div id="ep-palette"></div>
+      <div id="ep-size">
+        <span>宽:</span>
+        <button class="size-btn" id="ep-w-dec">−</button>
+        <span id="ep-w-val">?</span>
+        <button class="size-btn" id="ep-w-inc">+</button>
+        <span class="sep">|</span>
+        <span>高:</span>
+        <button class="size-btn" id="ep-h-dec">−</button>
+        <span id="ep-h-val">?</span>
+        <button class="size-btn" id="ep-h-inc">+</button>
+      </div>
       <div id="ep-mode"></div>
       <div id="ep-error"></div>
       <div id="ep-textarea-section">
@@ -389,6 +432,8 @@ S . # # G E
   let game = null;
   let renderer = null;
   let LEVELS = [];
+  // Dynamic level file list (loaded from server or defaults)
+  let LEVEL_FILES_DYNAMIC = [];
 
   const COLOR_HEX = { red: '#e74c3c', blue: '#3498db', green: '#2ecc71', yellow: '#f1c40f' };
 
@@ -400,6 +445,13 @@ S . # # G E
     document.getElementById('levelSelect').value = index;
     // When switching levels, mark editor as needing a fresh load from disk
     editorLastLevelIndex = -1;
+  }
+
+  // Get current level's filename (basename without path, with .txt)
+  function currentLevelFilename() {
+    const name = LEVEL_FILES_DYNAMIC[currentLevelIndex];
+    if (!name) return null;
+    return name.endsWith('.txt') ? name : name + '.txt';
   }
 
   function gameRender() {
@@ -558,9 +610,84 @@ S . # # G E
       errorEl.textContent = '';
       editorGame = new Game(editorLevelDef);
       editorRenderFull(); // render editorGame on main canvas (fixes click coordinate offset)
+      updateSizeDisplay();
     } catch (err) {
       errorEl.textContent = err.message;
     }
+  }
+
+  function updateSizeDisplay() {
+    if (!editorLevelDef) return;
+    document.getElementById('ep-w-val').textContent = editorLevelDef.width;
+    document.getElementById('ep-h-val').textContent = editorLevelDef.height;
+  }
+
+  // Resize the level map in the textarea by adding/removing rows/cols
+  function resizeLevel(dw, dh) {
+    const text = editorEl.value;
+    const lines = text.split('\n');
+
+    // Find map lines (non-meta)
+    const mapLineIndices = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (!isMetaLine(lines[i])) mapLineIndices.push(i);
+    }
+    if (mapLineIndices.length === 0) return;
+
+    // Parse current map into token rows
+    let rows = mapLineIndices.map(idx => {
+      return lines[idx].split(/\s+/).filter(t => t.length > 0);
+    });
+
+    const currentH = rows.length;
+    const currentW = rows[0]?.length || 0;
+
+    const newW = Math.max(1, currentW + dw);
+    const newH = Math.max(1, currentH + dh);
+
+    // Adjust columns
+    rows = rows.map(row => {
+      if (row.length < newW) {
+        // Expand: pad with '.'
+        while (row.length < newW) row.push('.');
+      } else if (row.length > newW) {
+        // Trim
+        row = row.slice(0, newW);
+      }
+      return row;
+    });
+
+    // Adjust rows
+    if (newH > currentH) {
+      for (let i = currentH; i < newH; i++) {
+        rows.push(Array(newW).fill('.'));
+      }
+    } else if (newH < currentH) {
+      rows = rows.slice(0, newH);
+    }
+
+    // Rebuild the lines array
+    let rowIdx = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (!isMetaLine(lines[i])) {
+        if (rowIdx < rows.length) {
+          lines[i] = rows[rowIdx++].join(' ');
+        } else {
+          lines[i] = null; // mark for removal
+        }
+      }
+    }
+
+    // Remove null entries
+    let newLines = lines.filter(l => l !== null);
+
+    // Append any remaining new rows (if we added rows)
+    while (rowIdx < rows.length) {
+      newLines.push(rows[rowIdx++].join(' '));
+    }
+
+    editorEl.value = newLines.join('\n');
+    editorParseAndRender();
   }
 
   // The editor paints on the main canvas but uses editorGame for state
@@ -604,14 +731,10 @@ S . # # G E
     document.getElementById('btnEditor').classList.add('active');
     // Only (re-)fetch from disk when switching to a different level; preserve textarea edits otherwise
     if (editorLastLevelIndex !== currentLevelIndex) {
-      const LEVEL_FILES = [
-        '1-growth','2-echo','3-prism','4-shadow','5-fork',
-        '6-rewind','7-forgetting','8-portal','9-subagent',
-      ];
-      const name = LEVEL_FILES[currentLevelIndex];
-      if (name) {
+      const filename = currentLevelFilename();
+      if (filename) {
         try {
-          const txt = await (await fetch(`levels/${name}.txt`)).text();
+          const txt = await (await fetch(`levels/${filename}`)).text();
           editorEl.value = txt;
           editorLastLevelIndex = currentLevelIndex;
         } catch (_) { /* keep existing textarea content on error */ }
@@ -621,6 +744,7 @@ S . # # G E
     }
     // Switch rendering to editor game
     editorParseAndRender();
+    updateSizeDisplay();
     // Canvas click for painting
     setupEditorCanvasEvents();
   }
@@ -705,24 +829,89 @@ S . # # G E
       else if (game) gameRender();
     });
 
-    // Load levels
-    LEVELS = await loadLevelsBrowser();
-
+    // Load levels — try dynamic list from server first, fallback to static
     const select = document.getElementById('levelSelect');
+
+    async function loadLevelList() {
+      let fileList = null;
+      try {
+        const r = await fetch('http://localhost:3001/list-levels');
+        if (r.ok) {
+          const data = await r.json();
+          // Strip .txt extension for the fetcher
+          fileList = data.files.map(f => f.replace(/\.txt$/, ''));
+        }
+      } catch (_) {}
+      if (!fileList) {
+        // Fallback to static list
+        fileList = ['1-growth','2-echo','3-prism','4-shadow','5-fork',
+                    '6-rewind','7-forgetting','8-portal','9-subagent'];
+      }
+      LEVEL_FILES_DYNAMIC = fileList;
+
+      LEVELS = [];
+      for (const name of fileList) {
+        try {
+          const txt = await (await fetch(`levels/${name}.txt`)).text();
+          LEVELS.push(parseLevelText(txt));
+        } catch (_) {}
+      }
+    }
+
+    async function rebuildLevelSelect(selectIndex) {
+      // Clear existing options
+      select.innerHTML = '';
+      if (LEVELS.length === 0) {
+        const opt = document.createElement('option');
+        opt.textContent = '（无法加载关卡，请通过 HTTP 服务器打开）';
+        select.appendChild(opt);
+      } else {
+        LEVELS.forEach((level, i) => {
+          const opt = document.createElement('option');
+          opt.value = i;
+          opt.textContent = `${i + 1}. ${level.title || LEVEL_FILES_DYNAMIC[i] || i}`;
+          select.appendChild(opt);
+        });
+      }
+      if (typeof selectIndex === 'number') {
+        loadLevel(selectIndex);
+      }
+    }
+
+    await loadLevelList();
+
     if (LEVELS.length === 0) {
       const opt = document.createElement('option');
       opt.textContent = '（无法加载关卡，请通过 HTTP 服务器打开）';
       select.appendChild(opt);
     } else {
-      LEVELS.forEach((level, i) => {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = `${level.world}. ${level.title}`;
-        select.appendChild(opt);
-      });
+      await rebuildLevelSelect(0);
       select.addEventListener('change', e => loadLevel(parseInt(e.target.value)));
-      loadLevel(0);
     }
+
+    // New level button
+    document.getElementById('btnNewLevel').addEventListener('click', async () => {
+      const name = prompt('新关卡名称（如 10-myLevel）:');
+      if (!name || !name.trim()) return;
+      const safeName = name.trim().replace(/[^a-z0-9\u4e00-\u9fff_-]/gi, '-');
+      const filename = safeName + '.txt';
+      // Default 5x5 blank level template
+      const content = `// world: ${LEVELS.length + 1}\n// title: ${safeName}\n\nS . . . .\n. . . . .\n. . . . .\n. . . . .\n. . . . E\n`;
+      try {
+        const res = await fetch('http://localhost:3001/save-level', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, content }),
+        });
+        const data = await res.json();
+        if (!data.ok) { alert('创建失败: ' + (data.error || '未知错误')); return; }
+        // Reload level list and select new level
+        await loadLevelList();
+        await rebuildLevelSelect(LEVELS.length - 1);
+      } catch (e) {
+        alert('创建失败 (服务未运行?): ' + e.message);
+      }
+    });
 
     window.addEventListener('keydown', handleKey);
     initTouchSwipe(canvas);
@@ -808,35 +997,46 @@ S . # # G E
     // Load current game level into editor
     document.getElementById('ep-load-level').addEventListener('click', async () => {
       if (LEVELS.length === 0) return;
-      // Fetch the raw txt for current level
-      const LEVEL_FILES = [
-        '1-growth','2-echo','3-prism','4-shadow','5-fork',
-        '6-rewind','7-forgetting','8-portal','9-subagent',
-      ];
-      const name = LEVEL_FILES[currentLevelIndex];
-      if (!name) return;
+      const filename = currentLevelFilename();
+      if (!filename) return;
       try {
-        const txt = await (await fetch(`levels/${name}.txt`)).text();
+        const txt = await (await fetch(`levels/${filename}`)).text();
         editorEl.value = txt;
         editorParseAndRender();
+        updateSizeDisplay();
       } catch (e) {
         errorEl.textContent = '加载失败: ' + e.message;
       }
     });
 
-    // Save / download as txt file
-    document.getElementById('ep-save').addEventListener('click', () => {
+    // Save to server via POST /save-level
+    document.getElementById('ep-save').addEventListener('click', async () => {
       const txt = editorEl.value;
-      const blob = new Blob([txt], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      // Try to name it sensibly based on title
-      const titleMatch = txt.match(/\/\/\s*title\s*:\s*(.+)/);
-      const title = titleMatch ? titleMatch[1].trim().replace(/[^a-z0-9\u4e00-\u9fff]/gi, '-') : 'level';
-      a.download = `${title}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = currentLevelFilename();
+      if (!filename) {
+        errorEl.textContent = '无法确定文件名，请先选择关卡';
+        return;
+      }
+      try {
+        const res = await fetch('http://localhost:3001/save-level', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, content: txt }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          errorEl.textContent = '';
+          modeEl.textContent = `✅ 已保存: ${data.saved}`;
+          // Update in-memory level
+          try {
+            LEVELS[currentLevelIndex] = parseLevelText(txt);
+          } catch (_) {}
+        } else {
+          errorEl.textContent = '保存失败: ' + (data.error || '未知错误');
+        }
+      } catch (e) {
+        errorEl.textContent = '保存失败 (服务未运行?): ' + e.message;
+      }
     });
 
     // Source toggle (mobile: show/hide textarea section)
@@ -846,6 +1046,12 @@ S . # # G E
       const expanded = textareaSection.classList.toggle('expanded');
       sourceToggleBtn.textContent = expanded ? '📄 隐藏源码' : '📄 查看源码';
     });
+
+    // Size control buttons
+    document.getElementById('ep-w-dec').addEventListener('click', () => resizeLevel(-1, 0));
+    document.getElementById('ep-w-inc').addEventListener('click', () => resizeLevel(+1, 0));
+    document.getElementById('ep-h-dec').addEventListener('click', () => resizeLevel(0, -1));
+    document.getElementById('ep-h-inc').addEventListener('click', () => resizeLevel(0, +1));
 
     // Keyboard in editor: play mode when not focused on textarea
     window.addEventListener('keydown', (e) => {
