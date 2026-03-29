@@ -101,6 +101,7 @@
     <h2>TRAIL Level Editor</h2>
     <div id="toolbar">
       <select id="loadLevel"><option value="">加载关卡...</option></select>
+      <button id="btnSave">💾 保存</button>
       <button id="btnTest">▶ 试玩</button>
       <button id="btnSolution">▶ 解法</button>
       <button id="btnReset">↺ 重置</button>
@@ -398,6 +399,44 @@ S . # # G E
         setTimeout(step, 150);
       }
       step();
+    });
+
+    // === Save button ===
+    document.getElementById('btnSave').addEventListener('click', async () => {
+      const levelName = loadSelect.value || '';
+      let filename = levelName ? `${levelName}.txt` : '';
+      if (!filename) {
+        // 尝试从编辑器内容里找关卡名
+        const match = editorEl.value.match(/\/\/\s*world:\s*(\S+)/);
+        if (match) filename = `${match[1]}.txt`;
+      }
+      if (!filename) {
+        errorEl.textContent = '请先从下拉菜单加载关卡，才能保存';
+        return;
+      }
+      const content = editorEl.value;
+      try {
+        const resp = await fetch('http://localhost:3001/save-level', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, content }),
+        });
+        if (resp.ok) {
+          statusEl.textContent = `✅ 已保存到 levels/${filename}`;
+        } else {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || resp.statusText);
+        }
+      } catch (e) {
+        // fallback: 下载文件
+        console.warn('[save] 保存服务不可用，改为下载:', e.message);
+        const blob = new Blob([content], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        statusEl.textContent = `⚠️ 保存服务不可用，已下载 ${filename}`;
+      }
     });
 
     // Initial
