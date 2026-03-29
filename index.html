@@ -554,7 +554,7 @@ S . # # G E
       editorLevelDef = parseLevelText(editorEl.value);
       errorEl.textContent = '';
       editorGame = new Game(editorLevelDef);
-      gameRender(); // re-render main canvas (editor uses same canvas when open)
+      editorRenderFull(); // render editorGame on main canvas (fixes click coordinate offset)
     } catch (err) {
       errorEl.textContent = err.message;
     }
@@ -595,10 +595,22 @@ S . # # G E
     editorParseAndRender();
   }
 
-  function openEditor() {
+  async function openEditor() {
     editorOpen = true;
     document.getElementById('editor-panel').classList.add('open');
     document.getElementById('btnEditor').classList.add('active');
+    // Auto-load the current game level into the editor textarea
+    const LEVEL_FILES = [
+      '1-growth','2-echo','3-prism','4-shadow','5-fork',
+      '6-rewind','7-forgetting','8-portal','9-subagent',
+    ];
+    const name = LEVEL_FILES[currentLevelIndex];
+    if (name) {
+      try {
+        const txt = await (await fetch(`levels/${name}.txt`)).text();
+        editorEl.value = txt;
+      } catch (_) { /* keep existing textarea content on error */ }
+    }
     // Switch rendering to editor game
     editorParseAndRender();
     // Canvas click for painting
