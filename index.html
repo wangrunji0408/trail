@@ -152,32 +152,34 @@
     }
 
     /* ── Editor panel ── */
+    /* Editor always uses position:fixed so it never affects the flex layout */
     #editor-panel {
       display: none;
       flex-direction: column;
+      position: fixed;
+      bottom: 0;
+      right: 0;
       width: 360px;
       min-width: 280px;
       max-width: 50vw;
-      border-left: 1px solid #2a2a4e;
+      max-height: 80vh;
+      border-left: 2px solid #2a2a4e;
+      border-top: 2px solid #2a2a4e;
       background: #0d0c14;
       overflow: hidden;
-      flex-shrink: 0;
+      z-index: 100;
     }
     #editor-panel.open { display: flex; }
 
-    /* On small screens (phone portrait), editor overlays the D-pad area */
+    /* On small screens (phone portrait), editor spans full width over D-pad */
     @media (max-width: 600px) {
       #editor-panel.open {
-        position: fixed;
-        bottom: 0;
         left: 0;
         right: 0;
         width: 100%;
         max-width: 100%;
         max-height: 60vh;
         border-left: none;
-        border-top: 2px solid #2a2a4e;
-        z-index: 100;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
       }
