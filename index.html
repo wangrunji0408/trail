@@ -535,7 +535,9 @@ S . # # G E
           const gx = Math.floor(cx / cell);
           const gy = Math.floor(cy / cell);
           if (gx >= 0 && gx < editorLevelDef.width && gy >= 0 && gy < editorLevelDef.height) {
-            updateCellInText(gx, gy, selectedTile);
+            const currentToken = getCellToken(gx, gy);
+            const newToken = (currentToken === selectedTile) ? '.' : selectedTile;
+            updateCellInText(gx, gy, newToken);
           }
         }
         return; // don't move snake in paint mode
@@ -705,6 +707,23 @@ S . # # G E
     return !t || t.startsWith('//');
   }
 
+  function getCellToken(gx, gy) {
+    const text = editorEl.value;
+    const lines = text.split('\n');
+    const mapStart = lines.findIndex(l => !isMetaLine(l));
+    if (mapStart < 0) return '.';
+    let mapRow = 0;
+    for (let i = mapStart; i < lines.length; i++) {
+      if (isMetaLine(lines[i])) continue;
+      if (mapRow === gy) {
+        const tokens = lines[i].split(/\s+/).filter(t => t.length > 0);
+        return tokens[gx] || '.';
+      }
+      mapRow++;
+    }
+    return '.';
+  }
+
   function updateCellInText(gx, gy, token) {
     const text = editorEl.value;
     const lines = text.split('\n');
@@ -782,7 +801,10 @@ S . # # G E
       const gx = Math.floor(cx / cell);
       const gy = Math.floor(cy / cell);
       if (gx < 0 || gx >= editorLevelDef.width || gy < 0 || gy >= editorLevelDef.height) return;
-      updateCellInText(gx, gy, selectedTile);
+      // Toggle: if cell already has the brush type, clear it; otherwise paint it
+      const currentToken = getCellToken(gx, gy);
+      const newToken = (currentToken === selectedTile) ? '.' : selectedTile;
+      updateCellInText(gx, gy, newToken);
     };
 
     canvas.addEventListener('click', _editorClickHandler);
