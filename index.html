@@ -165,29 +165,21 @@
     }
     #editor-panel.open { display: flex; }
 
-    /* On small screens (phone portrait), editor goes BELOW the game area */
+    /* On small screens (phone portrait), editor overlays the D-pad area */
     @media (max-width: 600px) {
-      html, body {
-        overflow: hidden;
-      }
-      #app {
-        overflow: hidden;
-      }
-      #main-area {
-        flex-direction: column;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-      }
-      #game-panel {
-        flex-shrink: 0;
-      }
       #editor-panel.open {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
         width: 100%;
         max-width: 100%;
+        max-height: 60vh;
         border-left: none;
         border-top: 2px solid #2a2a4e;
-        /* Not fixed/overlay — stays in normal flow below game */
-        flex-shrink: 0;
+        z-index: 100;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
       }
       /* On mobile, textarea is hidden by default; shown when toggled */
       #ep-textarea-section {
