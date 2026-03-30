@@ -5,9 +5,9 @@
 // checkpoint: invert 1
 
 # # # # # # # #
-# . . . . . . #
-S . . r C . G E
-# . . . . . . #
+. r . . # . . #
+S # . . C . G E
+. b . . # . . #
 # # # # # # # #
 
-// solution: ddddddd
+// solution: wddsddddd
