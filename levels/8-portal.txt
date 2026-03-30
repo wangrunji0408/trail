@@ -1,12 +1,12 @@
 // world: 8
 // title: 传送
-// note: 主网格缺少的颜色只能从子空间获取
-// gate: ry
+// note: 主网格缺少的字符只能从子空间获取
+// gate: SU
 // solution: dd{ddd}ddd
 
-S r @ . G E
+^ S @ . G E
 
 --- sublevel
 // title: 子空间
 
-S y . E
+^ U . E

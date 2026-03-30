@@ -7,7 +7,7 @@ export const DIR = {
   RIGHT: { dx: 1, dy: 0 },
 };
 
-const INVERT = { red: 'blue', blue: 'red', green: 'yellow', yellow: 'green' };
+const ROLE_CHARS = new Set(['U', 'A', 'S', 'T']);
 
 function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
 
@@ -27,7 +27,7 @@ export class Game {
       Array.from({ length: this.width }, () => ({ type: 'empty' }))
     );
     if (def.walls) for (const [x, y] of def.walls) this.grid[y][x] = { type: 'wall' };
-    if (def.colors) for (const t of def.colors) this.grid[t.y][t.x] = { type: 'color', color: t.c };
+    if (def.chars) for (const t of def.chars) this.grid[t.y][t.x] = { type: 'char', char: t.char };
     if (def.gates) for (const t of def.gates) this.grid[t.y][t.x] = { type: 'gate', pattern: t.pattern };
     if (def.switches) for (const t of def.switches) {
       this.grid[t.y][t.x] = { type: 'switch', switchId: t.id, permanent: !!t.permanent };
@@ -35,20 +35,14 @@ export class Game {
     if (def.switchWalls) for (const t of def.switchWalls) {
       this.grid[t.y][t.x] = { type: 'switch_wall', switchId: t.id };
     }
-    if (def.checkpoints) for (const t of def.checkpoints) {
-      this.grid[t.y][t.x] = { type: 'checkpoint' };
+    if (def.decodes) for (const t of def.decodes) {
+      this.grid[t.y][t.x] = { type: 'decode' };
     }
     if (def.dyes) for (const t of def.dyes) {
-      this.grid[t.y][t.x] = { type: 'dye', color: t.c };
+      this.grid[t.y][t.x] = { type: 'dye', char: t.char };
     }
     if (def.wildcards) for (const [x, y] of def.wildcards) {
       this.grid[y][x] = { type: 'wildcard' };
-    }
-    if (def.shadowZone) for (const [x, y] of def.shadowZone) {
-      this.grid[y][x].shadow = true;
-    }
-    if (def.shadowColors) for (const t of def.shadowColors) {
-      this.grid[t.y][t.x] = { type: 'color', color: t.c, shadow: true };
     }
     if (def.forks) for (const t of def.forks) this.grid[t.y][t.x] = { type: 'fork' };
     if (def.portals) for (const t of def.portals) {
@@ -62,18 +56,18 @@ export class Game {
     }
     if (def.exit) this.grid[def.exit[1]][def.exit[0]] = { type: 'exit' };
 
-    this.snake = [{ x: def.start[0], y: def.start[1], color: null, isShadow: false, isPreset: false }];
+    this.decodeRules = def.decodeRules || [];
+
+    this.snake = [{ x: def.start[0], y: def.start[1], char: null }];
 
     this.won = false;
     this.switchState = {};
     this.undoStack = [];
     this.message = null;
     this.maxLength = def.maxLength || Infinity;
-    this.memoryStoneColors = {};
+    this.memoryStoneChars = {};
     this.lastDir = null;
-
-    this.checkpointRule = def.checkpointRule || 'invert';
-    this.checkpointSteps = def.checkpointSteps || 1;
+    this.activeRole = null;
 
     this.phase = 'playing';
 
@@ -81,8 +75,6 @@ export class Game {
     this.branches = null;
     this.activeBranch = 0;
     this.forkLength = 0;
-
-    // Extra connections for rendering (e.g., fork branches)
     this.extraConnections = [];
 
     this.portalGame = null;
@@ -148,19 +140,29 @@ export class Game {
     this.pushUndo();
     this.lastDir = dir;
 
-    let segColor = null;
-    if (cell.type === 'color') segColor = cell.color;
-    if (cell.type === 'dye') segColor = cell.color;
+    let segChar = null;
+    if (cell.type === 'char') segChar = cell.char;
+    if (cell.type === 'dye') segChar = cell.char;
+    if (cell.type === 'decode') segChar = this._resolveDecodeChar(activeSnake);
 
-    activeSnake.push({
-      x: nx, y: ny,
-      color: segColor,
-      isShadow: !!cell.shadow,
-      isPreset: false,
-    });
+    // Update activeRole if stepping on a role char
+    if (segChar && ROLE_CHARS.has(segChar)) {
+      this.activeRole = segChar;
+    }
+
+    activeSnake.push({ x: nx, y: ny, char: segChar });
     this._applyEffects(cell, nx, ny, dir);
     this._enforceMaxLength();
     return { success: true };
+  }
+
+  _resolveDecodeChar(snake) {
+    // Build sequence string from snake chars
+    const seq = snake.map(s => s.char).filter(Boolean).join('');
+    for (const rule of this.decodeRules) {
+      if (rule.regex.test(seq)) return rule.output;
+    }
+    return '?';
   }
 
   _applyEffects(cell, x, y, dir) {
@@ -174,7 +176,6 @@ export class Game {
       this.won = true;
       this.phase = 'won';
     }
-    // Fork: auto-fork when stepping on F tile
     if (cell.type === 'fork' && !this.branches) {
       this.branches = [
         { snake: clone(this.getActiveSnake()), switchState: clone(this.switchState) },
@@ -189,13 +190,10 @@ export class Game {
       for (let gy = 0; gy < this.height; gy++) {
         for (let gx = 0; gx < this.width; gx++) {
           if (this.grid[gy][gx].type === 'wildcard') {
-            this.grid[gy][gx] = { type: 'color', color: cell.color };
+            this.grid[gy][gx] = { type: 'char', char: cell.char };
           }
         }
       }
-    }
-    if (cell.type === 'checkpoint') {
-      this._handleCheckpoint(dir);
     }
     if (cell.type === 'portal') {
       this.portalReturnPos = { x, y };
@@ -211,56 +209,55 @@ export class Game {
     }
   }
 
-  _handleCheckpoint(dir) {
-    const snake = this.getActiveSnake();
-    let lastColor = null;
-    for (let i = snake.length - 2; i >= 0; i--) {
-      if (snake[i].color && !snake[i].isPreset) { lastColor = snake[i].color; break; }
-    }
-    if (!lastColor) return;
-
-    const responseColor = this.checkpointRule === 'invert'
-      ? (INVERT[lastColor] || lastColor) : lastColor;
-
-    snake[snake.length - 1].isPreset = true;
-
-    for (let step = 0; step < this.checkpointSteps; step++) {
-      const head = snake[snake.length - 1];
-      const ax = head.x + dir.dx;
-      const ay = head.y + dir.dy;
-      if (ax < 0 || ax >= this.width || ay < 0 || ay >= this.height) break;
-      if (this.grid[ay][ax].type === 'wall') break;
-      if (snake.some(s => s.x === ax && s.y === ay)) break;
-      snake.push({ x: ax, y: ay, color: responseColor, isShadow: false, isPreset: true });
-    }
-  }
-
   // === GATE CHECKING ===
   _checkGate(pattern) {
-    const visible = this.getActiveSnake().filter(s => !s.isShadow);
-    const stoneSegs = Object.values(this.memoryStoneColors).map(c => ({ color: c }));
-    const colored = [...stoneSegs, ...visible].filter(s => s.color);
-    for (let i = 0; i <= colored.length - pattern.length; i++) {
+    if (!pattern || pattern.length === 0) return true;
+
+    const visible = this._getVisibleSequence();
+    // Add memory stone chars
+    const stoneChars = Object.values(this.memoryStoneChars);
+    const seq = [...stoneChars, ...visible];
+
+    // Subsequence matching
+    for (let i = 0; i <= seq.length - pattern.length; i++) {
       let match = true;
       for (let j = 0; j < pattern.length; j++) {
-        if (colored[i + j].color !== pattern[j]) { match = false; break; }
+        if (seq[i + j] !== pattern[j]) { match = false; break; }
       }
       if (match) return true;
     }
     return false;
   }
 
+  // Build visible sequence: all chars, but skip content between T and next U/A/S
+  _getVisibleSequence() {
+    const snake = this.getActiveSnake();
+    const result = [];
+    let inThink = false;
+    for (const seg of snake) {
+      if (!seg.char) continue;
+      if (seg.char === 'T') {
+        inThink = true;
+        continue;  // T itself is also hidden
+      }
+      if (inThink && ROLE_CHARS.has(seg.char) && seg.char !== 'T') {
+        inThink = false;
+      }
+      if (!inThink) {
+        result.push(seg.char);
+      }
+    }
+    return result;
+  }
+
   // === FORK (Tab) ===
-  // Tab when not forked → create fork; Tab when forked → switch branch
   switchBranch() {
     if (!this.branches) return;
-    // Switch active branch
     this.branches[this.activeBranch].switchState = clone(this.switchState);
     this.activeBranch = (this.activeBranch + 1) % this.branches.length;
     this.switchState = clone(this.branches[this.activeBranch].switchState);
   }
 
-  // Auto-merge: moving branch lands on target branch's unique cell
   _mergeBranches(movingIdx, targetIdx, mergeX, mergeY) {
     this.pushUndo();
     const moving = this.branches[movingIdx];
@@ -276,9 +273,6 @@ export class Game {
 
     this.snake = [...shared, ...movingUnique, ...targetUnique];
 
-    // Extra connections for renderer:
-    // 1. Fork point → target branch start
-    // 2. Moving branch end → merge point
     this.extraConnections = [];
     if (shared.length > 0 && targetUnique.length > 0) {
       this.extraConnections.push([shared[shared.length - 1], targetUnique[0]]);
@@ -308,19 +302,27 @@ export class Game {
     if (cell.type === 'switch' && !cell.permanent) {
       this.switchState[cell.switchId] = !this.switchState[cell.switchId];
     }
+    // Restore activeRole by scanning backwards
+    this.activeRole = null;
+    for (let i = snake.length - 1; i >= 0; i--) {
+      if (snake[i].char && ROLE_CHARS.has(snake[i].char)) {
+        this.activeRole = snake[i].char;
+        break;
+      }
+    }
     return true;
   }
 
   _exitPortal() {
     if (!this.portalGame) return;
-    let returnColor = null;
+    let returnChar = null;
     for (let i = this.portalGame.snake.length - 1; i >= 0; i--) {
-      if (this.portalGame.snake[i].color) { returnColor = this.portalGame.snake[i].color; break; }
+      if (this.portalGame.snake[i].char) { returnChar = this.portalGame.snake[i].char; break; }
     }
-    this.snake[this.snake.length - 1].color = returnColor;
+    this.snake[this.snake.length - 1].char = returnChar;
     this.portalGame = null;
     this.phase = 'playing';
-    this.message = returnColor ? `获得 ${returnColor}` : null;
+    this.message = returnChar ? `获得 ${returnChar}` : null;
   }
 
   selectInstruction(index) {
@@ -330,13 +332,13 @@ export class Game {
     if (!instr) return;
     const subGame = new Game(cell.subLevel);
     for (const m of instr.moves) subGame.move(DIR[m]);
-    let returnColor = null;
+    let returnChar = null;
     for (let i = subGame.snake.length - 1; i >= 0; i--) {
-      if (subGame.snake[i].color) { returnColor = subGame.snake[i].color; break; }
+      if (subGame.snake[i].char) { returnChar = subGame.snake[i].char; break; }
     }
-    this.snake[this.snake.length - 1].color = returnColor;
+    this.snake[this.snake.length - 1].char = returnChar;
     this.phase = 'playing';
-    this.message = returnColor ? `子代理返回 ${returnColor}` : '子代理未能完成任务';
+    this.message = returnChar ? `子代理返回 ${returnChar}` : '子代理未能完成任务';
     this._delegateCell = null;
   }
 
@@ -345,8 +347,8 @@ export class Game {
     while (snake.length > this.maxLength) {
       const removed = snake.shift();
       const cell = this.grid[removed.y]?.[removed.x];
-      if (cell?.memoryStone && removed.color) {
-        this.memoryStoneColors[`${removed.x},${removed.y}`] = removed.color;
+      if (cell?.memoryStone && removed.char) {
+        this.memoryStoneChars[`${removed.x},${removed.y}`] = removed.char;
       }
     }
   }
@@ -356,13 +358,14 @@ export class Game {
       snake: clone(this.snake),
       switchState: clone(this.switchState),
       won: this.won, phase: this.phase,
-      memoryStoneColors: clone(this.memoryStoneColors),
+      memoryStoneChars: clone(this.memoryStoneChars),
       branches: this.branches ? clone(this.branches) : null,
       activeBranch: this.activeBranch,
       forkLength: this.forkLength,
       extraConnections: clone(this.extraConnections),
       message: this.message,
       grid: clone(this.grid),
+      activeRole: this.activeRole,
     });
     if (this.undoStack.length > 200) this.undoStack.shift();
   }
@@ -375,13 +378,14 @@ export class Game {
     this.switchState = s.switchState;
     this.won = s.won;
     this.phase = s.phase;
-    this.memoryStoneColors = s.memoryStoneColors;
+    this.memoryStoneChars = s.memoryStoneChars;
     this.branches = s.branches;
     this.activeBranch = s.activeBranch;
     this.forkLength = s.forkLength;
     this.extraConnections = s.extraConnections;
     this.message = s.message;
     this.grid = s.grid;
+    this.activeRole = s.activeRole;
     return true;
   }
 
@@ -401,12 +405,13 @@ export class Game {
       grid: this.grid, width: this.width, height: this.height,
       snakes: this.getAllSnakes(), won: this.won, phase: this.phase,
       switchState: this.switchState, message: this.message,
-      maxLength: this.maxLength, memoryStoneColors: this.memoryStoneColors,
+      maxLength: this.maxLength, memoryStoneChars: this.memoryStoneChars,
       portalGame: this.portalGame,
       world: this.world, title: this.levelDef.title,
       activeBranch: this.activeBranch,
       extraConnections: this.extraConnections,
       delegateInstructions: this._delegateCell?.instructions || null,
+      activeRole: this.activeRole,
     };
   }
 }

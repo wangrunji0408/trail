@@ -1,10 +1,10 @@
-// world: 5
+// world: 6
 // title: 分叉
 // note: 走到F上自动分叉。Tab切换分支。分支走到另一分支上时自动合并，序列拼接，副作用保留。
-// gate: r
+// gate: S
 
 . !a . . . #
-S F . |a G E
-. r . . . #
+^ F . |a G E
+. S . . . #
 
 // solution: dwdtsdwwdsdd

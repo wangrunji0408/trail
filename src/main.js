@@ -3,7 +3,7 @@
 import { Game, DIR } from './game.js';
 import { Renderer } from './renderer.js';
 import { parseLevelText } from './levels.js';
-import { COLOR_HEX, DIR_MAP } from './constants.js';
+import { ROLE_HEX, ROLES, DIR_MAP } from './constants.js';
 import { initEditor } from './editor.js';
 
 let currentLevelIndex = 0;
@@ -43,12 +43,12 @@ function renderSequence() {
   if (!el || !game) return;
   const snake = game.getActiveSnake();
   let html = '';
+  let currentRole = null;
   for (const seg of snake) {
-    if (!seg.color) continue;
-    const bg = COLOR_HEX[seg.color] || '#888';
-    const opacity = seg.isShadow ? '0.35' : '1';
-    const border = seg.isPreset ? 'dashed' : 'solid';
-    html += `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${bg};opacity:${opacity};border:1.5px ${border} rgba(255,255,255,0.3);margin:0 1px;" title="${seg.color}"></span>`;
+    if (!seg.char) continue;
+    if (ROLES.has(seg.char)) currentRole = seg.char;
+    const bg = currentRole ? ROLE_HEX[currentRole] : '#888';
+    html += `<span style="display:inline-block;min-width:14px;height:16px;line-height:16px;text-align:center;font-size:10px;font-weight:bold;border-radius:3px;background:${bg};color:#fff;margin:0 1px;padding:0 2px;" title="${seg.char}">${seg.char}</span>`;
   }
   el.innerHTML = html;
 }
@@ -136,8 +136,8 @@ async function loadLevelList() {
     }
   } catch (_) {}
   if (!fileList) {
-    fileList = ['1-growth', '2-echo', '3-prism', '4-shadow', '5-fork',
-                '6-rewind', '7-forgetting', '8-portal', '9-subagent'];
+    fileList = ['1-token', '2-decode', '3-conversation', '4-system', '5-thinking',
+                '6-fork', '7-forgetting', '8-portal', '9-subagent'];
   }
   LEVEL_FILES_DYNAMIC = fileList;
 
@@ -196,7 +196,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (!name || !name.trim()) return;
     const safeName = name.trim().replace(/[^a-z0-9\u4e00-\u9fff_-]/gi, '-');
     const filename = safeName + '.txt';
-    const content = `// world: ${LEVELS.length + 1}\n// title: ${safeName}\n\nS . . . .\n. . . . .\n. . . . .\n. . . . .\n. . . . E\n`;
+    const content = `// world: ${LEVELS.length + 1}\n// title: ${safeName}\n\n^ . . . .\n. . . . .\n. . . . .\n. . . . .\n. . . . E\n`;
     try {
       const res = await fetch('http://localhost:3001/save-level', {
         method: 'POST',

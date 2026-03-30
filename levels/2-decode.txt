@@ -1,0 +1,6 @@
+// world: 2
+// title: Decode
+// decode: 1\+1=$ 2
+// gate: 1+1=2
+
+^ 1 + 1 = ✨ G E

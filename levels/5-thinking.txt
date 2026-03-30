@@ -1,0 +1,5 @@
+// world: 5
+// title: 思考
+// gate: UA
+
+^ U T 1 A G E

@@ -2,33 +2,41 @@
 
 import { DIR } from './game.js';
 
-export const COLOR_HEX = {
-  red: '#e74c3c', blue: '#3498db', green: '#2ecc71', yellow: '#f1c40f',
+export const ROLE_HEX = {
+  U: '#3498db',  // user - blue
+  A: '#2ecc71',  // assistant - green
+  S: '#e74c3c',  // system - red
+  T: '#95a5a6',  // think - grey
 };
 
+export const ROLES = new Set(['U', 'A', 'S', 'T']);
+
+// Characters that can appear as char tiles in the DSL
+export const CHAR_TOKENS = new Set([
+  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+  '+', '-', '*', '/', '=',
+  'U', 'A', 'S', 'T',
+]);
+
 export const TILES = [
-  { token: '.', label: '空', color: null },
-  { token: '#', label: '墙', color: '#0a0a15' },
-  { token: 'S', label: '起', color: null },
-  { token: 'E', label: '终', color: '#ffd700' },
-  { token: 'r', label: '红', color: '#e74c3c' },
-  { token: 'b', label: '蓝', color: '#3498db' },
-  { token: 'g', label: '绿', color: '#2ecc71' },
-  { token: 'y', label: '黄', color: '#f1c40f' },
-  { token: 'G', label: '门', color: '#4a4a5a' },
-  { token: 'C', label: 'C站', color: '#00bcd4' },
-  { token: '!a', label: '!开', color: null },
-  { token: '|a', label: '|墙', color: '#8b4513' },
-  { token: '~', label: '~暗', color: '#8000ff' },
-  { token: '~b', label: '~蓝', color: '#8844cc' },
-  { token: 'F', label: 'F叉', color: '#ff9800' },
-  { token: 'M', label: 'M合', color: '#ff9800' },
-  { token: '@', label: '@传', color: '#9b59b6' },
-  { token: '$', label: '$派', color: '#e91e63' },
-  { token: 'Dr', label: 'Dr', color: '#e74c3c' },
-  { token: 'Dg', label: 'Dg', color: '#2ecc71' },
-  { token: '◇', label: '◇', color: '#888' },
-  { token: '*r', label: '★r', color: '#f39c12' },
+  { token: '.', color: null },
+  { token: '#', color: '#0a0a15' },
+  { token: '^', color: null },
+  { token: 'E', color: '#ffd700' },
+  { token: 'U', color: '#3498db' },
+  { token: 'A', color: '#2ecc71' },
+  { token: 'S', color: '#e74c3c' },
+  { token: 'T', color: '#95a5a6' },
+  { token: 'G', color: '#4a4a5a' },
+  { token: '✨', color: '#00bcd4' },
+  { token: '!a', color: null },
+  { token: '|a', color: '#8b4513' },
+  { token: 'F', color: '#ff9800' },
+  { token: 'M', color: '#ff9800' },
+  { token: '@', color: '#9b59b6' },
+  { token: '$', color: '#e91e63' },
+  { token: '◇', color: '#888' },
+  { token: '*', color: '#f39c12' },
 ];
 
 export const DIR_MAP = {

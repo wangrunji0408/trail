@@ -133,13 +133,13 @@ function buildPalette() {
     btn.dataset.token = tile.token;
     let inner = '';
     if (tile.color) inner += `<span class="swatch" style="background:${tile.color}"></span>`;
-    inner += tile.label;
+    inner += tile.token;
     btn.innerHTML = inner;
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       selectedTile = tile.token;
-      modeEl.textContent = `画笔: ${tile.label} (${tile.token})`;
+      modeEl.textContent = `画笔: ${tile.token}`;
     });
     paletteEl.appendChild(btn);
   }

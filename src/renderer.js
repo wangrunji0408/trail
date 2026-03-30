@@ -1,10 +1,11 @@
 // TRAIL - Canvas Renderer
 
+import { ROLE_HEX, ROLES } from './constants.js';
+
 const CELL_DEFAULT = 56;
 const PAD = 1;
 const RADIUS = 6;
 
-// Compute cell size so the grid fits within the available area.
 function computeCell(gridW, gridH, availW, availH) {
   const headerH = 44;
   const footerH = 80;
@@ -21,30 +22,22 @@ const PALETTE = {
   exitGlow: 'rgba(255,215,0,0.25)',
   snakeDefault: '#e0e0e0',
   snakeHead: '#ffffff',
-  shadowOverlay: 'rgba(128,0,255,0.15)',
-  shadowSeg: 0.35,
-  red: '#e74c3c',
-  blue: '#3498db',
-  green: '#2ecc71',
-  yellow: '#f1c40f',
   gate: '#4a4a5a',
   switchOn: '#2ecc71',
   switchOff: '#7f8c8d',
   switchWallClosed: '#8b4513',
   switchWallOpen: 'rgba(139,69,19,0.2)',
-  checkpoint: '#00bcd4',
+  decode: '#00bcd4',
   fork: '#ff9800',
   portal: '#9b59b6',
   delegate: '#e91e63',
   memoryStoneActive: '#f39c12',
+  charTile: 'rgba(200,200,200,0.2)',
   text: '#e0e0e0',
   textDim: '#7f8c8d',
   textHighlight: '#ffd700',
 };
 
-function colorVal(name) {
-  return PALETTE[name] || name || PALETTE.snakeDefault;
-}
 
 export class Renderer {
   constructor(canvas) {
@@ -59,7 +52,6 @@ export class Renderer {
     const ctx = this.ctx;
     const { width, height } = state;
 
-    // Determine available space from wrapper element
     const wrapper = this.canvas.parentElement;
     const availW = wrapper ? wrapper.clientWidth : window.innerWidth;
     const availH = wrapper ? wrapper.clientHeight : window.innerHeight;
@@ -81,15 +73,12 @@ export class Renderer {
     this.canvas.style.height = canvasH + 'px';
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
 
-    // Background
     ctx.fillStyle = PALETTE.bg;
     ctx.fillRect(0, 0, canvasW, canvasH);
 
-    // Center grid
     this.offsetX = Math.floor((canvasW - gridW) / 2);
     this.offsetY = headerH;
 
-    // Header
     this._drawHeader(ctx, state, canvasW, headerH);
 
     ctx.save();
@@ -100,10 +89,8 @@ export class Renderer {
     }
     ctx.restore();
 
-    // Footer
     this._drawFooter(ctx, state, canvasW, this.offsetY + gridH + 10);
 
-    // Portal overlay
     if (state.portalGame) {
       this._drawPortalOverlay(ctx, state.portalGame.getState(), canvasW, canvasH, cell);
     }
@@ -126,16 +113,15 @@ export class Renderer {
     ctx.textAlign = 'right';
     const phaseText = {
       forked: `分支 ${state.activeBranch + 1}`,
-      merge_select: '选择分支',
-      in_portal: '📦 子空间',
-      delegate_select: '📋 选择指令',
-      won: '✓ 通关',
+      in_portal: '子空间',
+      delegate_select: '选择指令',
+      won: '通关',
     }[state.phase] || '';
     ctx.fillText(phaseText, canvasW - 10, midY);
   }
 
   _drawGrid(ctx, state, cell = CELL_DEFAULT) {
-    const { grid, width, height, switchState, memoryStoneColors } = state;
+    const { grid, width, height, switchState, memoryStoneChars } = state;
     const radius = Math.max(3, Math.floor(cell * RADIUS / CELL_DEFAULT));
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -144,12 +130,16 @@ export class Renderer {
 
         let fill = PALETTE.empty;
         if (c.type === 'wall') fill = PALETTE.wall;
-        else if (c.type === 'color') fill = this._colorFill(c.color, 0.35);
+        else if (c.type === 'char') {
+          fill = ROLES.has(c.char)
+            ? this._alphaColor(ROLE_HEX[c.char], 0.35)
+            : PALETTE.charTile;
+        }
         else if (c.type === 'exit') fill = PALETTE.exitGlow;
         else if (c.type === 'gate') fill = PALETTE.gate;
         else if (c.type === 'switch_wall') fill = switchState[c.switchId] ? PALETTE.switchWallOpen : PALETTE.switchWallClosed;
-        else if (c.type === 'checkpoint') fill = 'rgba(0,188,212,0.15)';
-        else if (c.type === 'dye') fill = this._colorFill(c.color, 0.25);
+        else if (c.type === 'decode') fill = 'rgba(0,188,212,0.15)';
+        else if (c.type === 'dye') fill = PALETTE.charTile;
         else if (c.type === 'wildcard') fill = 'rgba(200,200,200,0.15)';
         else if (c.type === 'portal') fill = 'rgba(155,89,182,0.2)';
         else if (c.type === 'delegate') fill = 'rgba(233,30,99,0.2)';
@@ -158,11 +148,12 @@ export class Renderer {
 
         if (c.memoryStone) {
           const key = `${x},${y}`;
-          const stored = memoryStoneColors[key];
+          const stored = memoryStoneChars?.[key];
           ctx.save();
           if (stored) {
             ctx.globalAlpha = 0.3;
-            this._fillRoundRect(ctx, cx + PAD, cy + PAD, cell - PAD * 2, cell - PAD * 2, radius, colorVal(stored));
+            const storeColor = ROLES.has(stored) ? ROLE_HEX[stored] : PALETTE.snakeDefault;
+            this._fillRoundRect(ctx, cx + PAD, cy + PAD, cell - PAD * 2, cell - PAD * 2, radius, storeColor);
             ctx.globalAlpha = 1;
           }
           ctx.fillStyle = stored ? PALETTE.memoryStoneActive : PALETTE.textDim;
@@ -171,10 +162,6 @@ export class Renderer {
           ctx.textBaseline = 'middle';
           ctx.fillText('★', cx + cell / 2, cy + cell / 2);
           ctx.restore();
-        }
-
-        if (c.shadow) {
-          this._fillRoundRect(ctx, cx + PAD, cy + PAD, cell - PAD * 2, cell - PAD * 2, radius, PALETTE.shadowOverlay);
         }
 
         this._drawCellMarker(ctx, c, cx, cy, state, cell);
@@ -194,52 +181,29 @@ export class Renderer {
       ctx.fillText('⚑', mx, my);
     }
     if (c.type === 'gate') {
-      const p = c.pattern;
-      const dotR = Math.max(3, Math.floor(cell * 0.1));
-      const gap = Math.max(2, Math.floor(cell * 0.05));
-      const totalW = p.length * dotR * 2 + (p.length - 1) * gap;
-      let sx = mx - totalW / 2 + dotR;
-      for (const col of p) {
-        ctx.beginPath();
-        ctx.arc(sx, my, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = colorVal(col);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        sx += dotR * 2 + gap;
-      }
+      ctx.fillStyle = PALETTE.text;
+      ctx.font = `bold ${fs}px monospace`;
+      ctx.fillText('🔒', mx, my);
     }
-    if (c.type === 'checkpoint') {
-      ctx.fillStyle = PALETTE.checkpoint;
-      ctx.font = `bold ${Math.max(9, fs - 4)}px monospace`;
-      ctx.fillText('</>', mx, my);
+    if (c.type === 'char' && !ROLES.has(c.char)) {
+      ctx.fillStyle = PALETTE.text;
+      ctx.font = `bold ${fs}px monospace`;
+      ctx.fillText(c.char, mx, my);
+    }
+    if (c.type === 'decode') {
+      ctx.fillStyle = PALETTE.decode;
+      ctx.font = `bold ${fs}px monospace`;
+      ctx.fillText('✨', mx, my);
     }
     if (c.type === 'dye') {
-      ctx.fillStyle = colorVal(c.color);
+      ctx.fillStyle = PALETTE.text;
       ctx.font = `bold ${fs}px monospace`;
-      ctx.fillText('▼', mx, my);
+      ctx.fillText('▼' + (c.char || ''), mx, my);
     }
     if (c.type === 'wildcard') {
       ctx.fillStyle = PALETTE.textDim;
       ctx.font = `${fs}px monospace`;
       ctx.fillText('◇', mx, my);
-    }
-    if (c.type === 'echo_gate') {
-      const eFs = Math.max(8, fs - 5);
-      ctx.fillStyle = PALETTE.checkpoint;
-      ctx.font = `${eFs}px monospace`;
-      ctx.fillText('echo', mx, my - cell * 0.15);
-      const p = c.requires;
-      const dotR = Math.max(3, Math.floor(cell * 0.08));
-      let sx = mx - ((p.length * dotR * 2 + (p.length - 1) * 2) / 2) + dotR;
-      for (const col of p) {
-        ctx.beginPath();
-        ctx.arc(sx, my + cell * 0.15, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = colorVal(col);
-        ctx.fill();
-        sx += dotR * 2 + 2;
-      }
     }
     if (c.type === 'switch') {
       const on = state.switchState[c.switchId];
@@ -288,6 +252,7 @@ export class Renderer {
   _drawSnake(ctx, snake, active, state, cell = CELL_DEFAULT) {
     if (snake.length === 0) return;
 
+    // Draw connections
     for (let i = 0; i < snake.length - 1; i++) {
       const a = snake[i], b = snake[i + 1];
       if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) continue;
@@ -300,6 +265,9 @@ export class Renderer {
       }
     }
 
+    // Compute activeRole at each segment for coloring
+    const roles = this._computeSegmentRoles(snake);
+
     for (let i = 0; i < snake.length; i++) {
       const seg = snake[i];
       const sx = seg.x * cell + cell / 2;
@@ -308,36 +276,57 @@ export class Renderer {
       const r = Math.max(6, Math.floor(cell * (isHead ? 0.26 : 0.20)));
 
       ctx.save();
-      if (seg.isShadow) ctx.globalAlpha = PALETTE.shadowSeg;
-      if (!active) ctx.globalAlpha *= 0.5;
+      if (!active) ctx.globalAlpha = 0.5;
 
-      let fill = seg.color ? colorVal(seg.color) : PALETTE.snakeDefault;
-      if (isHead) fill = PALETTE.snakeHead;
+      // Determine fill color
+      const role = roles[i];
+      let fill;
+      if (isHead) {
+        fill = PALETTE.snakeHead;
+      } else if (seg.char && ROLES.has(seg.char)) {
+        fill = ROLE_HEX[seg.char];
+      } else if (role) {
+        fill = this._alphaColor(ROLE_HEX[role], 0.7);
+      } else {
+        fill = seg.char ? PALETTE.snakeDefault : PALETTE.snakeDefault;
+      }
+
       ctx.beginPath();
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
       ctx.fillStyle = fill;
       ctx.fill();
 
-      if (isHead && seg.color) {
-        ctx.strokeStyle = colorVal(seg.color);
-        ctx.lineWidth = Math.max(2, cell * 0.05);
-        ctx.stroke();
-      }
-      if (seg.isPreset) {
-        ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      if (seg.isShadow && seg.color) {
-        ctx.strokeStyle = colorVal(seg.color);
+      // Head with role color outline
+      if (isHead && role) {
+        ctx.strokeStyle = ROLE_HEX[role];
         ctx.lineWidth = Math.max(2, cell * 0.05);
         ctx.stroke();
       }
 
+      // Draw char on segment
+      if (seg.char) {
+        ctx.fillStyle = isHead ? '#000' : (ROLES.has(seg.char) ? '#fff' : '#000');
+        ctx.font = `bold ${Math.max(8, Math.floor(cell * 0.22))}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(seg.char, sx, sy);
+      }
+
       ctx.restore();
     }
+  }
+
+  // Compute the active role at each snake segment position
+  _computeSegmentRoles(snake) {
+    const roles = new Array(snake.length).fill(null);
+    let currentRole = null;
+    for (let i = 0; i < snake.length; i++) {
+      if (snake[i].char && ROLES.has(snake[i].char)) {
+        currentRole = snake[i].char;
+      }
+      roles[i] = currentRole;
+    }
+    return roles;
   }
 
   _drawFooter(ctx, state, canvasW, footerY) {
@@ -346,7 +335,7 @@ export class Renderer {
     if (state.won) {
       ctx.fillStyle = PALETTE.exit;
       ctx.font = 'bold 18px monospace';
-      ctx.fillText('✓ 通关！按 N 进入下一关', canvasW / 2, footerY + 14);
+      ctx.fillText('通关！按 N 进入下一关', canvasW / 2, footerY + 14);
       return;
     }
 
@@ -375,26 +364,6 @@ export class Renderer {
       ctx.fillStyle = PALETTE.textDim;
       ctx.font = '12px monospace';
       ctx.fillText(`蛇身: ${snake.length} / ${state.maxLength}`, canvasW / 2, y);
-      y += 16;
-    }
-    if (state.presetColors?.length > 0) {
-      ctx.fillStyle = PALETTE.textDim;
-      ctx.font = '12px monospace';
-      const dotR = 5;
-      const label = '预置: ';
-      const labelW = ctx.measureText(label).width;
-      const totalW = labelW + state.presetColors.length * (dotR * 2 + 4);
-      let sx = canvasW / 2 - totalW / 2;
-      ctx.textAlign = 'left';
-      ctx.fillText(label, sx, y);
-      sx += labelW + 4;
-      for (const c of state.presetColors) {
-        ctx.beginPath();
-        ctx.arc(sx + dotR, y - 4, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = colorVal(c);
-        ctx.fill();
-        sx += dotR * 2 + 4;
-      }
     }
   }
 
@@ -444,9 +413,7 @@ export class Renderer {
     ctx.fill();
   }
 
-  _colorFill(color, alpha) {
-    const hex = PALETTE[color] || '#888';
-    if (alpha >= 1) return hex;
+  _alphaColor(hex, alpha) {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);

@@ -1,6 +1,6 @@
 // TRAIL - Level txt parser
 
-const COLOR_MAP = { r: 'red', b: 'blue', g: 'green', y: 'yellow' };
+import { CHAR_TOKENS } from './constants.js';
 
 export function parseLevelText(text) {
   // Split on "---" to separate main level from sub-levels
@@ -11,7 +11,6 @@ export function parseLevelText(text) {
   for (let i = 1; i < sections.length; i++) {
     const sub = parseSection(sections[i]);
     if (!sub.start || !sub.exit) continue;
-    // Attach sub-level to the appropriate portal/delegate
     if (def.portals.length > 0 && !def.portals[0].subLevel) {
       def.portals[0].subLevel = sub;
     } else if (def.delegates.length > 0 && !def.delegates[0].subLevel) {
@@ -31,6 +30,7 @@ export function parseLevelText(text) {
 function parseSection(text) {
   const lines = text.split('\n');
   const meta = {};
+  const metaArrays = {};  // for repeated keys like 'decode'
   const mapLines = [];
 
   for (const line of lines) {
@@ -38,7 +38,12 @@ function parseSection(text) {
     if (!trimmed) continue;
     if (trimmed.startsWith('//')) {
       const m = trimmed.match(/^\/\/\s*([\w]+)\s*:\s*(.+)$/);
-      if (m) meta[m[1]] = m[2].trim();
+      if (m) {
+        const key = m[1], val = m[2].trim();
+        meta[key] = val;
+        if (!metaArrays[key]) metaArrays[key] = [];
+        metaArrays[key].push(val);
+      }
       continue;
     }
     mapLines.push(trimmed);
@@ -53,24 +58,29 @@ function parseSection(text) {
     title: meta.title || '',
     width, height,
     start: null, exit: null,
-    walls: [], colors: [], gates: [],
+    walls: [], chars: [], gates: [],
     switches: [], switchWalls: [],
-    checkpoints: [],
-    shadowZone: [], shadowColors: [],
+    decodes: [], decodeRules: [],
     forks: [],
     portals: [], delegates: [],
     memoryStones: [], dyes: [], wildcards: [],
   };
 
-  const gatePattern = meta.gate
-    ? meta.gate.split('').map(c => COLOR_MAP[c] || c)
-    : [];
+  // Gate pattern: each character is a symbol to match
+  const gatePattern = meta.gate ? [...meta.gate] : [];
 
-  if (meta.checkpoint) {
-    const parts = meta.checkpoint.split(/\s+/);
-    def.checkpointRule = parts[0] || 'invert';
-    def.checkpointSteps = parseInt(parts[1]) || 1;
+  // Decode rules: "// decode: regex output" (one per line)
+  if (metaArrays.decode) {
+    for (const line of metaArrays.decode) {
+      const lastSpace = line.lastIndexOf(' ');
+      if (lastSpace > 0) {
+        const pattern = line.slice(0, lastSpace);
+        const output = line.slice(lastSpace + 1);
+        def.decodeRules.push({ regex: new RegExp(pattern), output });
+      }
+    }
   }
+
   if (meta.maxLength) def.maxLength = parseInt(meta.maxLength);
   if (meta.solution) def.solution = meta.solution;
 
@@ -96,44 +106,47 @@ function parseSection(text) {
 function parseToken(token, x, y, def, gatePattern) {
   if (token === '.') return;
   if (token === '#') { def.walls.push([x, y]); return; }
-  if (token === 'S') { def.start = [x, y]; return; }
+  if (token === '^') { def.start = [x, y]; return; }
   if (token === 'E') { def.exit = [x, y]; return; }
   if (token === 'G') { def.gates.push({ x, y, pattern: gatePattern }); return; }
-  if (token === 'C') { def.checkpoints.push({ x, y }); return; }
+  if (token === '✨') { def.decodes.push({ x, y }); return; }
   if (token === '@') { def.portals.push({ x, y }); return; }
   if (token === 'F') { def.forks.push({ x, y }); return; }
   if (token === '$') { def.delegates.push({ x, y }); return; }
   if (token === '◇') { def.wildcards.push([x, y]); return; }
 
-  if (token.length === 1 && COLOR_MAP[token]) {
-    def.colors.push({ x, y, c: COLOR_MAP[token] });
+  // Char tiles: 0-9, +-*/=, U, A, S, T
+  if (CHAR_TOKENS.has(token)) {
+    def.chars.push({ x, y, char: token });
     return;
   }
-  if (token.length === 2 && token[0] === 'D' && COLOR_MAP[token[1]]) {
-    def.dyes.push({ x, y, c: COLOR_MAP[token[1]] });
+
+  // Dye tiles: Dr, Db, etc. (legacy support)
+  if (token.length === 2 && token[0] === 'D' && CHAR_TOKENS.has(token[1])) {
+    def.dyes.push({ x, y, char: token[1] });
     return;
   }
-  if (token.length === 2 && token[0] === '~' && COLOR_MAP[token[1]]) {
-    def.shadowColors.push({ x, y, c: COLOR_MAP[token[1]] });
-    def.shadowZone.push([x, y]);
-    return;
-  }
-  if (token === '~') { def.shadowZone.push([x, y]); return; }
+
+  // Memory stones: * or *X
   if (token[0] === '*') {
     def.memoryStones.push([x, y]);
-    if (token.length === 2 && COLOR_MAP[token[1]]) {
-      def.colors.push({ x, y, c: COLOR_MAP[token[1]] });
+    if (token.length === 2 && CHAR_TOKENS.has(token[1])) {
+      def.chars.push({ x, y, char: token[1] });
     }
     return;
   }
+
+  // Switches: !a
   if (token[0] === '!' && token.length >= 2) {
     def.switches.push({ x, y, id: token[1], permanent: true });
     return;
   }
+  // Switch walls: |a
   if (token[0] === '|' && token.length >= 2) {
     def.switchWalls.push({ x, y, id: token[1] });
     return;
   }
+
   console.warn(`Unknown token "${token}" at (${x},${y}), treating as wall`);
   def.walls.push([x, y]);
 }
