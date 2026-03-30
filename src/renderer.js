@@ -252,12 +252,8 @@ export class Renderer {
   _drawSnake(ctx, snake, active, state, cell = CELL_DEFAULT) {
     if (snake.length === 0) return;
 
-    // Draw connections
-    for (let i = 0; i < snake.length - 1; i++) {
-      const a = snake[i], b = snake[i + 1];
-      if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) continue;
-      this._drawConnection(ctx, a, b, active, cell);
-    }
+    // Draw path as a single rounded polyline for smooth turns
+    this._drawSnakePath(ctx, snake, active, cell);
 
     if (active && state.extraConnections) {
       for (const [a, b] of state.extraConnections) {
@@ -275,6 +271,10 @@ export class Renderer {
       const isHead = (i === snake.length - 1);
       const r = Math.max(6, Math.floor(cell * (isHead ? 0.26 : 0.20)));
 
+      // Skip drawing segments with no char (unless head or start)
+      const isStart = (i === 0);
+      if (!isHead && !isStart && !seg.char) continue;
+
       ctx.save();
       if (!active) ctx.globalAlpha = 0.5;
 
@@ -282,13 +282,13 @@ export class Renderer {
       const role = roles[i];
       let fill;
       if (isHead) {
-        fill = PALETTE.snakeHead;
+        fill = role ? ROLE_HEX[role] : PALETTE.snakeHead;
       } else if (seg.char && ROLES.has(seg.char)) {
         fill = ROLE_HEX[seg.char];
       } else if (role) {
         fill = this._alphaColor(ROLE_HEX[role], 0.7);
       } else {
-        fill = seg.char ? PALETTE.snakeDefault : PALETTE.snakeDefault;
+        fill = PALETTE.snakeDefault;
       }
 
       ctx.beginPath();
@@ -296,16 +296,9 @@ export class Renderer {
       ctx.fillStyle = fill;
       ctx.fill();
 
-      // Head with role color outline
-      if (isHead && role) {
-        ctx.strokeStyle = ROLE_HEX[role];
-        ctx.lineWidth = Math.max(2, cell * 0.05);
-        ctx.stroke();
-      }
-
-      // Draw char on segment
-      if (seg.char) {
-        ctx.fillStyle = isHead ? '#000' : (ROLES.has(seg.char) ? '#fff' : '#000');
+      // Draw char on segment (skip role markers — they are color-only)
+      if (seg.char && !ROLES.has(seg.char)) {
+        ctx.fillStyle = '#000';
         ctx.font = `bold ${Math.max(8, Math.floor(cell * 0.22))}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -393,6 +386,47 @@ export class Renderer {
       this._drawSnake(ctx, snake, active, subState, subCell);
     }
     ctx.restore();
+  }
+
+  _drawSnakePath(ctx, snake, active, cell) {
+    if (snake.length < 2) return;
+
+    // Collect contiguous segments (adjacent cells)
+    const points = [];
+    let runs = []; // array of runs, each run is an array of {sx, sy}
+    let currentRun = [{ sx: snake[0].x * cell + cell / 2, sy: snake[0].y * cell + cell / 2 }];
+
+    for (let i = 1; i < snake.length; i++) {
+      const prev = snake[i - 1], cur = snake[i];
+      const px = cur.x * cell + cell / 2, py = cur.y * cell + cell / 2;
+      if (Math.abs(prev.x - cur.x) + Math.abs(prev.y - cur.y) === 1) {
+        currentRun.push({ sx: px, sy: py });
+      } else {
+        runs.push(currentRun);
+        currentRun = [{ sx: px, sy: py }];
+      }
+    }
+    runs.push(currentRun);
+
+    const lineW = Math.max(4, cell * 0.14);
+    const cornerR = Math.max(2, cell * 0.2);
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = lineW;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const run of runs) {
+      if (run.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(run[0].sx, run[0].sy);
+      for (let i = 1; i < run.length - 1; i++) {
+        const prev = run[i - 1], cur = run[i], next = run[i + 1];
+        // Use arcTo for smooth corners
+        ctx.arcTo(cur.sx, cur.sy, next.sx, next.sy, cornerR);
+      }
+      ctx.lineTo(run[run.length - 1].sx, run[run.length - 1].sy);
+      ctx.stroke();
+    }
   }
 
   _drawConnection(ctx, a, b, active, cell = CELL_DEFAULT) {
