@@ -11,13 +11,6 @@ export const ROLE_HEX = {
 
 export const ROLES = new Set(['U', 'A', 'S', 'T']);
 
-// Characters that can appear as char tiles in the DSL
-export const CHAR_TOKENS = new Set([
-  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-  '+', '-', '*', '/', '=',
-  'U', 'A', 'S', 'T',
-]);
-
 export const TILES = [
   { token: '.', color: null },
   { token: '#', color: '#0a0a15' },

@@ -1,5 +1,11 @@
 // world: 3
 // title: 对话
-// gate: UA
+// gate: 👋
+// decode: U👋A$ 👋
 
-^ U A G E
+^ # # #
+U . 👋 .
+# # # A
+. . ✨ .
+. # # #
+. . G E

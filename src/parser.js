@@ -1,7 +1,5 @@
 // TRAIL - Level txt parser
 
-import { CHAR_TOKENS } from './constants.js';
-
 export function parseLevelText(text) {
   // Split on "---" to separate main level from sub-levels
   const sections = text.split(/^---.*$/m);
@@ -104,6 +102,12 @@ function parseSection(text) {
 }
 
 function parseToken(token, x, y, def, gatePattern) {
+  // Escape: \X → char tile with character X
+  if (token[0] === '\\' && token.length >= 2) {
+    def.chars.push({ x, y, char: token.slice(1) });
+    return;
+  }
+
   if (token === '.') return;
   if (token === '#') { def.walls.push([x, y]); return; }
   if (token === '^') { def.start = [x, y]; return; }
@@ -115,14 +119,8 @@ function parseToken(token, x, y, def, gatePattern) {
   if (token === '$') { def.delegates.push({ x, y }); return; }
   if (token === '◇') { def.wildcards.push([x, y]); return; }
 
-  // Char tiles: 0-9, +-*/=, U, A, S, T
-  if (CHAR_TOKENS.has(token)) {
-    def.chars.push({ x, y, char: token });
-    return;
-  }
-
-  // Dye tiles: Dr, Db, etc. (legacy support)
-  if (token.length === 2 && token[0] === 'D' && CHAR_TOKENS.has(token[1])) {
+  // Dye tiles: DX (legacy support)
+  if (token.length === 2 && token[0] === 'D') {
     def.dyes.push({ x, y, char: token[1] });
     return;
   }
@@ -130,8 +128,8 @@ function parseToken(token, x, y, def, gatePattern) {
   // Memory stones: * or *X
   if (token[0] === '*') {
     def.memoryStones.push([x, y]);
-    if (token.length === 2 && CHAR_TOKENS.has(token[1])) {
-      def.chars.push({ x, y, char: token[1] });
+    if (token.length >= 2) {
+      def.chars.push({ x, y, char: token.slice(1) });
     }
     return;
   }
@@ -147,6 +145,6 @@ function parseToken(token, x, y, def, gatePattern) {
     return;
   }
 
-  console.warn(`Unknown token "${token}" at (${x},${y}), treating as wall`);
-  def.walls.push([x, y]);
+  // All other tokens → char tile
+  def.chars.push({ x, y, char: token });
 }

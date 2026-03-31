@@ -269,7 +269,8 @@ export class Renderer {
       const sx = seg.x * cell + cell / 2;
       const sy = seg.y * cell + cell / 2;
       const isHead = (i === snake.length - 1);
-      const r = Math.max(6, Math.floor(cell * (isHead ? 0.26 : 0.20)));
+      const hasChar = seg.char && !ROLES.has(seg.char);
+      const r = Math.max(6, Math.floor(cell * (isHead ? 0.26 : hasChar ? 0.24 : 0.20)));
 
       // Skip drawing segments with no char (unless head or start)
       const isStart = (i === 0);
@@ -286,7 +287,7 @@ export class Renderer {
       } else if (seg.char && ROLES.has(seg.char)) {
         fill = ROLE_HEX[seg.char];
       } else if (role) {
-        fill = this._alphaColor(ROLE_HEX[role], 0.7);
+        fill = hasChar ? ROLE_HEX[role] : this._alphaColor(ROLE_HEX[role], 0.7);
       } else {
         fill = PALETTE.snakeDefault;
       }
@@ -299,7 +300,7 @@ export class Renderer {
       // Draw char on segment (skip role markers — they are color-only)
       if (seg.char && !ROLES.has(seg.char)) {
         ctx.fillStyle = '#000';
-        ctx.font = `bold ${Math.max(8, Math.floor(cell * 0.22))}px monospace`;
+        ctx.font = `bold ${Math.max(10, Math.floor(cell * 0.38))}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(seg.char, sx, sy);
@@ -391,40 +392,44 @@ export class Renderer {
   _drawSnakePath(ctx, snake, active, cell) {
     if (snake.length < 2) return;
 
-    // Collect contiguous segments (adjacent cells)
-    const points = [];
-    let runs = []; // array of runs, each run is an array of {sx, sy}
-    let currentRun = [{ sx: snake[0].x * cell + cell / 2, sy: snake[0].y * cell + cell / 2 }];
-
-    for (let i = 1; i < snake.length; i++) {
-      const prev = snake[i - 1], cur = snake[i];
-      const px = cur.x * cell + cell / 2, py = cur.y * cell + cell / 2;
-      if (Math.abs(prev.x - cur.x) + Math.abs(prev.y - cur.y) === 1) {
-        currentRun.push({ sx: px, sy: py });
-      } else {
-        runs.push(currentRun);
-        currentRun = [{ sx: px, sy: py }];
-      }
-    }
-    runs.push(currentRun);
-
+    const roles = this._computeSegmentRoles(snake);
     const lineW = Math.max(4, cell * 0.14);
     const cornerR = Math.max(2, cell * 0.2);
-    ctx.strokeStyle = active ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)';
+    const alpha = active ? 0.4 : 0.15;
     ctx.lineWidth = lineW;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    for (const run of runs) {
-      if (run.length < 2) continue;
-      ctx.beginPath();
-      ctx.moveTo(run[0].sx, run[0].sy);
-      for (let i = 1; i < run.length - 1; i++) {
-        const prev = run[i - 1], cur = run[i], next = run[i + 1];
-        // Use arcTo for smooth corners
-        ctx.arcTo(cur.sx, cur.sy, next.sx, next.sy, cornerR);
+    // Build list of edges (adjacent pairs) with the destination's role color
+    const edges = []; // { from, to, role }
+    for (let i = 1; i < snake.length; i++) {
+      const prev = snake[i - 1], cur = snake[i];
+      if (Math.abs(prev.x - cur.x) + Math.abs(prev.y - cur.y) !== 1) continue;
+      edges.push({ from: i - 1, to: i, role: roles[i - 1] });
+    }
+
+    // Group consecutive edges with the same role into runs
+    const pos = (i) => ({ sx: snake[i].x * cell + cell / 2, sy: snake[i].y * cell + cell / 2 });
+
+    let ri = 0;
+    while (ri < edges.length) {
+      const role = edges[ri].role;
+      const pts = [pos(edges[ri].from)];
+      while (ri < edges.length && edges[ri].role === role && (pts.length === 1 || edges[ri].from === edges[ri - 1].to)) {
+        pts.push(pos(edges[ri].to));
+        ri++;
       }
-      ctx.lineTo(run[run.length - 1].sx, run[run.length - 1].sy);
+
+      ctx.strokeStyle = role
+        ? this._alphaColor(ROLE_HEX[role], alpha)
+        : `rgba(255,255,255,${alpha})`;
+
+      ctx.beginPath();
+      ctx.moveTo(pts[0].sx, pts[0].sy);
+      for (let i = 1; i < pts.length - 1; i++) {
+        ctx.arcTo(pts[i].sx, pts[i].sy, pts[i + 1].sx, pts[i + 1].sy, cornerR);
+      }
+      ctx.lineTo(pts[pts.length - 1].sx, pts[pts.length - 1].sy);
       ctx.stroke();
     }
   }
