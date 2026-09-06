@@ -1,4 +1,4 @@
-import { TOKENS } from './levels.js';
+import { TOKENS, RECIPES } from './levels.js';
 const C = 48;
 const glyph = (token, x = 24, y = 24, size = 10) => {
   const color = TOKENS[token]?.color || '#cf755c';
@@ -7,6 +7,7 @@ const glyph = (token, x = 24, y = 24, size = 10) => {
   if (token === 'y') return `<path d="M${x} ${y-12}L${x+10} ${y}L${x} ${y+12}L${x-10} ${y}Z" fill="${color}"/><path d="M${x} ${y-8}v16" stroke="#ebd18a" stroke-width="1.5"/>`;
   if (token === 's') return `<g fill="${color}">${[0, 72, 144, 216, 288].map(a=>`<ellipse cx="${x}" cy="${y-6}" rx="4" ry="6" transform="rotate(${a} ${x} ${y})"/>`).join('')}<circle cx="${x}" cy="${y}" r="3" fill="#e6c49a"/></g>`;
   if (token === 'v') return `<path d="M${x} ${y-13}Q${x+2} ${y-2} ${x+12} ${y}Q${x+2} ${y+2} ${x} ${y+13}Q${x-2} ${y+2} ${x-12} ${y}Q${x-2} ${y-2} ${x} ${y-13}" fill="${color}"/><circle cx="${x}" cy="${y}" r="3" fill="#e8ddec"/>`;
+  if (token === 'k') return `<rect x="${x-9}" y="${y-12}" width="18" height="24" rx="3" fill="#decda6" stroke="#95825e"/><path d="M${x-5} ${y-5}h10m-10 5h10m-10 5h7" stroke="#95825e" stroke-width="2"/>`;
   return '';
 };
 export function tokenIcon(token, size = 24) { return `<svg width="${size}" height="${size}" viewBox="0 0 48 48" aria-hidden="true">${glyph(token)}</svg>`; }
@@ -17,12 +18,19 @@ function stoneTile(x, y, border = false) {
 }
 function fixtureArt(item, f) {
   const used = f.used.includes(item.type), x = item.x*C, y = item.y*C;
+  const open = f.switches.includes(item.channel);
+  const stored = f.stones[`${item.x},${item.y}`];
   let art = '';
   if(item.type === 'fold') art = `<ellipse cx="24" cy="37" rx="20" ry="7" fill="#acb79a"/><path d="M5 19L24 8 43 19V34L24 44 5 34Z" fill="#bcc4a9" stroke="#92a180"/><path d="M5 19l19 11 19-11M24 30v14" fill="none" stroke="#96a584"/><path d="M7 18l17-9 17 9-17 10Z" fill="#dfe0c9"/><g transform="translate(12 6) scale(.5)">${glyph('s')}</g>`;
-  if(item.type === 'stone') art = `<ellipse cx="24" cy="41" rx="18" ry="5" fill="#a7b693"/><path d="M11 40V13Q11 3 23 3H28Q37 4 37 13V40Z" fill="#c8ceb6" stroke="#9caa8b" stroke-width="1.4"/><path d="M15 36V14Q15 8 21 8" fill="none" stroke="#e2e4cf" stroke-width="2"/><path d="M28 4l-4 8 4 5-3 7" fill="none" stroke="#a3b093"/>${f.stone?`<g transform="translate(12 16) scale(.5)">${glyph(f.stone)}</g>`:'<path d="M18 29h12M18 33h8" stroke="#9eac8d" stroke-width="1.4"/>'}`;
-  if(item.type === 'veil') art = `<rect x="-4" y="-12" width="56" height="72" rx="14" fill="#f0f2de" opacity=".55"/><g stroke="#f9faec" stroke-width="2" stroke-linecap="round">${[7,15,24,33,41].map((x,i)=>`<path d="M${x} ${i%2?0:8}v25"/>`).join('')}</g><path d="M1 38q12-5 24 0t24 0" stroke="#c2cbb3" fill="none"/>`;
+  if(item.type === 'stone') art = `<ellipse cx="24" cy="41" rx="18" ry="5" fill="#a7b693"/><path d="M11 40V13Q11 3 23 3H28Q37 4 37 13V40Z" fill="#c8ceb6" stroke="#9caa8b" stroke-width="1.4"/><path d="M15 36V14Q15 8 21 8" fill="none" stroke="#e2e4cf" stroke-width="2"/><path d="M28 4l-4 8 4 5-3 7" fill="none" stroke="#a3b093"/>${stored?`<g transform="translate(12 16) scale(.5)">${glyph(stored)}</g>`:'<path d="M18 29h12M18 33h8" stroke="#9eac8d" stroke-width="1.4"/>'}`;
+  if(item.type === 'reset') art = `<rect x="4" y="2" width="40" height="44" rx="6" fill="#eff1df" stroke="#a4b596" stroke-width="2"/><path d="M10 6v36m28-36v36" stroke="#c4d0b5"/><text x="24" y="32" text-anchor="middle" fill="#809773" font-size="28">↺</text>`;
+  if(item.type === 'shutter') art = `<rect x="3" y="4" width="42" height="40" rx="4" fill="${open?'#dfe8ce':'#bbc7aa'}" stroke="#96a781"/><path d="${open?'M8 24h32m-8-7 8 7-8 7':'M13 8v32m11-32v32m11-32v32'}" stroke="#7c916a" stroke-width="3"/>`;
+  if(item.type === 'switch') art = `<rect x="6" y="8" width="36" height="34" rx="7" fill="#b9c3a4" stroke="#94a783"/><circle cx="24" cy="25" r="12" fill="${open?'#879b72':'#d6ba76'}" stroke="#8d9b70" stroke-width="2"/><circle cx="24" cy="${open?26:23}" r="5" fill="${open?'#d7e4bf':'#eddaaa'}"/>`;
+  if(item.type === 'sign') art = `<path d="M24 25v20" stroke="#99805e" stroke-width="5"/><rect x="7" y="5" width="34" height="27" rx="3" fill="#e0cc9f" stroke="#a18d65"/><text x="24" y="25" text-anchor="middle" fill="#7c7558" font-family="Georgia" font-size="22">?</text>`;
+  if(item.type === 'book') art = `<path d="M6 12q9-5 18 0 9-5 18 0v29q-9-5-18 0-9-5-18 0Z" fill="#e2d4ae" stroke="#a18d65" stroke-width="1.5"/><path d="M24 12v28m-12-20h7m-7 6h7m10-6h7m-7 6h7" stroke="#b19b74"/><text x="24" y="1" text-anchor="middle" fill="#7c7558" font-size="10">${RECIPES[item.recipe].name}</text>`;
   if(item.type === 'well') art = `<ellipse cx="24" cy="35" rx="20" ry="10" fill="#a8b496"/><path d="M6 22v13q18 16 36 0V22" fill="#b6c3a4" stroke="#93a680"/><ellipse cx="24" cy="22" rx="18" ry="10" fill="#d1d7be" stroke="#92a27f"/><ellipse cx="24" cy="22" rx="12" ry="6" fill="#54766c"/><path class="ripple" d="M16 22q8 5 16 0" fill="none" stroke="#92b7a0"/>${used?'<circle cx="40" cy="9" r="4" fill="#83a3a5"/>':''}`;
   if(item.type === 'pot') art = `<ellipse cx="24" cy="40" rx="18" ry="5" fill="#a8b295"/><path d="M16 10h16l-2 8q14 8 10 18-2 9-16 9S8 42 8 33q0-9 10-15Z" fill="${used?'#b6b6a5':'#c99f7f'}" stroke="#a18e73" stroke-width="1.3"/><ellipse cx="24" cy="10" rx="9" ry="4" fill="#e0b89a" stroke="#ad9072"/><ellipse cx="24" cy="10" rx="6" ry="2" fill="#526750"/><path d="M13 27q11 7 22 0M12 31q12 7 24 0" fill="none" stroke="#e5c5a3"/><path d="M24 24l4 4-4 4-4-4Z" fill="#967e8f"/>`;
+  if(item.type === 'well') art += `<g transform="translate(-2 -22)"><rect width="53" height="19" rx="4" fill="#f2efdc" stroke="#b2bd9e"/><g transform="translate(1 -1) scale(.42)">${glyph(item.input)}</g><text x="27" y="13" text-anchor="middle" font-size="11" fill="#748666">→</text><g transform="translate(33 -1) scale(.42)">${glyph('b')}</g></g>`;
   return `<g transform="translate(${x} ${y})">${art}</g>`;
 }
 export function renderBoard(game) {
@@ -55,6 +63,5 @@ export function renderBoard(game) {
     out+='</g>';
   }
   out+='</g>';
-  if(game.fixture && game.fixture.type!=='veil') out+=`<g transform="translate(${snake[0].x*C+24} ${snake[0].y*C-8})"><rect x="-18" y="-13" width="36" height="18" rx="5" fill="#f3f2df" stroke="#b2bd9e"/><text y="0" text-anchor="middle" fill="#748666" font-size="8" font-family="sans-serif">空格</text></g>`;
   return out;
 }

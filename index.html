@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f5f3eb" />
-    <meta name="description" content="衔尾：一条小蛇，七座庭院。一个关于携带、遗忘与留下的回合制解谜游戏。" />
+    <meta name="description" content="衔尾：回合制贪吃蛇解谜游戏。" />
     <title>衔尾 · TRAIL</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%232e5944'/%3E%3Cpath d='M12 12h12v8H14v9h14' stroke='%23e3e9ca' fill='none' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./src/style.css" />
@@ -16,32 +16,29 @@
           <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M10 10h16v10H14v10h16" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="29" cy="29" r="1.2" fill="#f5f3eb"/></svg>
           <span>衔尾</span><span class="brand-en">TRAIL</span>
         </a>
-        <span class="header-note">一条小蛇，七座庭院。</span>
+        <span class="header-note">回合制解谜</span>
         <div class="header-actions"><button id="sound" class="text-button" aria-label="开启声音" aria-pressed="false"></button><span class="separator"></span><button id="help" class="text-button">玩法 <span>↗</span></button></div>
       </header>
 
       <main>
         <aside class="story">
-          <div><button id="chapters" class="chapter-link"><span class="tiny-squares">▦</span> 庭院手记 <span>↗</span></button>
-            <div class="chapter-heading"><span id="chapter-number" class="chapter-number">01</span><span class="chapter-line"></span><span class="small-label">THE GARDEN</span></div>
-            <h1 id="level-title">初尝</h1>
-            <p id="level-subtitle" class="level-subtitle"></p>
-            <div class="objective"><div class="eyebrow"><span class="small-dot"></span> 此刻的小事</div><p id="objective"></p><div id="gate-recipe" class="gate-recipe"></div></div>
-            <div id="rule-note" class="rule-note"></div>
-          </div>
-          <div class="story-bottom"><svg class="botanical" viewBox="0 0 180 90" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.2"><path d="M30 83Q94 77 142 16M76 70Q70 37 52 29M106 49Q140 57 160 43M54 77Q51 58 34 52"/><path d="M52 29Q81 32 76 57Q51 49 52 29ZM122 33Q115 11 134 4Q147 26 122 33ZM124 52Q143 28 160 43Q150 65 124 52ZM35 53Q53 49 53 69Q36 74 35 53Z"/></g><circle cx="151" cy="14" r="2" fill="currentColor"/></svg><p id="epigraph" class="epigraph"></p><span class="edition">A QUIET LITTLE PUZZLE · VOL. 01</span></div>
+          <button id="chapters" class="chapter-link"><span class="tiny-squares">▦</span> 选择关卡 <span>↗</span></button>
+          <div class="chapter-heading"><span id="chapter-number" class="chapter-number">01</span><span class="chapter-line"></span><span class="small-label">关卡</span></div>
+          <h1 id="level-title">初尝</h1>
+          <div class="objective"><p id="objective"></p><div id="gate-recipe" class="gate-recipe"></div></div>
+          <div id="known-recipe" class="known-recipe" hidden></div>
         </aside>
 
         <section class="play-area" aria-label="游戏区域">
-          <div class="board-toolbar"><div id="breadcrumb" class="breadcrumb"><span class="live-dot"></span> 庭院 01 <span class="toolbar-muted">/ 07</span></div><div class="board-stats"><span>步数 <strong id="moves">00</strong></span><span class="separator"></span><span id="capacity-label">果纹 <strong id="capacity">0 / 4</strong></span></div></div>
-          <div class="board-wrap" id="board-wrap"><svg id="board" viewBox="0 0 720 528" role="img" aria-label="花园棋盘" tabindex="0"></svg><div id="room-tag" class="room-tag">慢慢来，每一步都算数。</div><div id="win-layer" class="win-layer" hidden></div></div>
+          <div class="board-toolbar"><div id="breadcrumb" class="breadcrumb"><span class="live-dot"></span> 庭院 01 <span class="toolbar-muted">/ 09</span></div><div class="board-stats"><span>步数 <strong id="moves">00</strong></span><span class="separator"></span><span id="capacity-label">果纹 <strong id="capacity">0 / 4</strong></span></div></div>
+          <div class="board-wrap" id="board-wrap"><svg id="board" viewBox="0 0 720 528" role="img" aria-label="花园棋盘" tabindex="0"></svg><div id="sign-popup" class="sign-popup" role="status" hidden></div><div id="win-layer" class="win-layer" hidden></div></div>
           <div class="under-board"><div class="inventory-area"><span class="small-label">身上的果纹</span><div id="inventory" class="inventory"></div></div><div id="interaction" class="interaction"></div></div>
           <div class="message-line"><span id="message-icon">↳</span><p id="message" aria-live="polite"></p></div>
-          <div class="controls"><div class="movement-guide"><span class="key-cluster"><kbd>↑</kbd><span><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></span></span><span>方向键移动 <small>也可以用 WASD</small></span></div><div class="action-controls"><button id="undo" class="control-button"><span>↶</span> 撤回 <kbd>Z</kbd></button><button id="restart" class="control-button"><span>⟳</span> 重来 <kbd>R</kbd></button><button id="hint" class="control-button"><span>✧</span> 一点提示</button></div></div>
-          <div class="touch-controls" aria-label="触屏控制"><button data-dir="up" aria-label="向上">↑</button><div><button data-dir="left" aria-label="向左">←</button><button data-dir="down" aria-label="向下">↓</button><button data-dir="right" aria-label="向右">→</button><button id="touch-interact" aria-label="交互">空格</button></div></div>
+          <div class="controls"><div class="movement-guide"><span class="key-cluster"><kbd>↑</kbd><span><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></span></span><span>方向键移动 <small>也可以用 WASD</small></span></div><div class="action-controls"><button id="undo" class="control-button"><span>↶</span> 撤回 <kbd>Z</kbd></button><button id="restart" class="control-button"><span>⟳</span> 重来 <kbd>R</kbd></button></div></div>
+          <div class="touch-controls" aria-label="触屏控制"><button data-dir="up" aria-label="向上">↑</button><div><button data-dir="left" aria-label="向左">←</button><button data-dir="down" aria-label="向下">↓</button><button data-dir="right" aria-label="向右">→</button><button id="touch-output" aria-label="输出">输出</button></div></div>
         </section>
       </main>
-      <footer><span><span class="footer-star">✳</span> 不赶时间，也不计输赢。</span><div id="progress" class="progress" aria-label="庭院进度"></div><span>关于携带、遗忘与留下</span></footer>
+      <footer><span id="completion-count"></span><div id="progress" class="progress" aria-label="关卡进度"></div><span>↑ ↓ ← → / WASD</span></footer>
     </div>
     <dialog id="modal"><div id="modal-content"></div><button id="close-modal" class="close-modal" aria-label="关闭">×</button></dialog>
     <script type="module" src="./src/app.js"></script>
